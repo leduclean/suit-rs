@@ -1,0 +1,32 @@
+[hooks]
+pre-commit="""sh -lc '
+  if ! command -v rustfmt >/dev/null 2>&1; then
+    echo "rustfmt not found. Install with: rustup component add rustfmt"
+    exit 1
+  fi
+
+  STAGED=$(git diff --cached --name-only --diff-filter=ACM || true)
+
+  echo "Formatting staged Rust files..."
+  echo "$STAGED" | while IFS= read -r file; do
+    case "$file" in
+      *.rs)
+        [ -f "$file" ] || continue
+        rustfmt "$file" || { echo "❌ rustfmt failed on $file"; exit 1; }
+        git add -- "$file"
+        ;;
+    esac
+  done
+' && cargo build"""
+pre-push ="""sh -lc '
+if ! command -v cargo-clippy >/dev/null 2>&1; then
+    echo "Clippy not found. Install with: rustup component add clippy"
+    exit 1
+fi
+
+cargo test &&
+cargo clippy --locked --workspace --all-features --all-targets -- -D clippy::all
+'"""
+
+[logging]
+verbose = false
