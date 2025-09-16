@@ -1,13 +1,16 @@
-use minicbor::{decode};
+use minicbor::decode;
 use std::fs::File;
 use std::io::Read;
-use suit_rs::manifest::{SuitStart};
+use suit_rs::manifest::SuitStart;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::open("testfiles/suit_manifest_expID.cbor")?;
     let mut buffer = Vec::new();
+    // Load hex from draft-ietf below as hex
+    let hex = "d86ba2025873825824822f5820f6d44a62ec906b392500c242e78e908e9cc5057f3f04104a06a8566200da2ee0584ad28443a10126a0f658400bbf7058c1a79dff23c7755d36aae5c6cc1aacb818f456e2e03f2664c369b9c6700931a52f1f8d808aa4a8e5220d479c9661d2bce0a44974004325001e3b1abb0359010fa5010102030358a4a2028181410004589b8814a20150fa6b4a53d5ad5fdfbe9de663e4d41ffe02501492af1425695e48bf429b2d51f2ab450f8258348614a10500050514a2035824822f582000112233445566778899aabbccddeeff0123456789abcdeffedcba98765432100e1987d058368614a10501050514a2035824822f58200123456789abcdeffedcba987654321000112233445566778899aabbccddeeff0e1a00012c22010f020f074382030f14585b860f8258288614a10500050514a115781c687474703a2f2f6578616d706c652e636f6d2f66696c65312e62696e58288614a10501050514a115781c687474703a2f2f6578616d706c652e636f6d2f66696c65322e62696e1502030f";
+    let bytes = hex::decode(hex).expect("invalid hex");
     file.read_to_end(&mut buffer)?;
-    let value: SuitStart = decode(&buffer)?;
-    println!("struct: {:?}", value);
+    let value: SuitStart = decode(&bytes)?;
+    println!("struct: {value:?}");
     Ok(())
 }

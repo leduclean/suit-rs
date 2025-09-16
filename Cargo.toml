@@ -6,8 +6,8 @@ edition = "2024"
 [dev-dependencies]
 rusty-hook = "^0.11.2"
 [dependencies]
-anyhow = "1.0.99"
 bitflags = { version = "2.9.4", features = ["serde"] }
+hex = "0.4.3"
 minicbor = { version = "2.1.1", features = ["full"] }
 regex = "1.11.2"
 serde = { version = "1.0.219", features = ["derive"] }
