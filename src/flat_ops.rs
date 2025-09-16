@@ -12,7 +12,7 @@ where
     F: FnMut(i64, &mut Decoder<'b>, &mut Ctx) -> Result<(), DecodeError>,
 {
     use std::convert::TryFrom;
-    
+
     // require top-level array
     match d.datatype()? {
         Type::Array => {}
@@ -38,8 +38,7 @@ where
                 Ok(i)
             }
             other => Err(DecodeError::message(format!(
-                "expected integer op id but got {:?}",
-                other
+                "expected integer op id but got {other:?}"
             ))),
         }
     };
@@ -50,8 +49,7 @@ where
         // definite-length array: must be an even number
         if remaining % 2 != 0 {
             return Err(DecodeError::message(format!(
-                "flat op/arg array length must be even, got {}",
-                remaining
+                "flat op/arg array length must be even, got {remaining}"
             )));
         }
 

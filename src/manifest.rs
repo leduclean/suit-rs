@@ -1,7 +1,14 @@
-use minicbor::{bytes::{ByteArray, ByteSlice, ByteVec}, data, decode::{Error as DecodeError}, display, encode::Error as EncodeError, Decode, Decoder, Encode, Encoder};
+use crate::flat_ops::decode_flat_pairs;
+use minicbor::{
+    bytes::{ByteArray, ByteSlice, ByteVec},
+    data::Type,
+    decode::Error as DecodeError,
+    display,
+    encode::Error as EncodeError,
+    Decode, Decoder, Encode, Encoder,
+};
 use regex::Regex;
 use std::collections::HashMap;
-
 
 type Rfc4122Uuid = ByteArray<16>;
 
@@ -16,29 +23,35 @@ where
         let bytes = d.bytes()?;
         let mut sub = Decoder::new(bytes);
         let inner = T::decode(&mut sub, ctx)?;
-        display(&bytes);
+        display(bytes);
         Ok(BstrCbor(inner))
     }
 }
-
 
 impl<T, C> Encode<C> for BstrCbor<T>
 where
     T: Encode<C>,
 {
-    fn encode<W: minicbor::encode::Write>(&self, e: &mut Encoder<W>, ctx: &mut C) -> Result<(), EncodeError<W::Error>> {
+    fn encode<W: minicbor::encode::Write>(
+        &self,
+        e: &mut Encoder<W>,
+        ctx: &mut C,
+    ) -> Result<(), EncodeError<W::Error>> {
         let mut buf = Vec::new();
         (self.0)
             .encode(&mut Encoder::new(&mut buf), ctx)
             .map_err(|inner| {
-                minicbor::encode::Error::<W::Error>::message(format!("inner encode error: {:?}", inner))
+                minicbor::encode::Error::<W::Error>::message(format!(
+                    "inner encode error: {inner:?}"
+                ))
             })?;
         e.bytes(&buf)?;
         Ok(())
     }
 }
 
-
+#[cfg(debug_assertions)]
+#[allow(dead_code)]
 #[derive(Encode, Debug)]
 #[cbor(transparent)]
 struct Debug<T>(T);
@@ -55,42 +68,21 @@ where
     }
 }
 
+#[cfg(debug_assertions)]
+#[allow(dead_code)]
 fn decode_with_debug<'b, T, Ctx>(d: &mut Decoder<'b>, ctx: &mut Ctx) -> Result<T, DecodeError>
 where
     T: Decode<'b, Ctx>,
 {
     println!("Decoding with debug...");
     let bytes = d.input();
-    println!("Shared sequence raw: {}", display(&bytes));
+    println!("Shared sequence raw: {}", display(bytes));
     let inner = T::decode(d, ctx)?;
     Ok(inner)
 }
-pub struct MaybeBstr<T>(pub T);
-
-impl<'b, T, Ctx> minicbor::Decode<'b, Ctx> for MaybeBstr<T>
-where
-    T: minicbor::Decode<'b, Ctx>,
-{
-    fn decode(d: &mut minicbor::Decoder<'b>, ctx: &mut Ctx) -> Result<Self, minicbor::decode::Error> {
-        match d.datatype()? {
-            minicbor::data::Type::Bytes => {
-                let b = d.bytes()?;
-                let mut sub = minicbor::Decoder::new(b);
-                let inner = T::decode(&mut sub, ctx)?;
-                Ok(MaybeBstr(inner))
-            }
-            _ => {
-                let inner = T::decode(d, ctx)?;
-                Ok(MaybeBstr(inner))
-            }
-        }
-    }
-}
-
-
 
 #[derive(Encode, Debug)]
-pub enum SuitStart{
+pub enum SuitStart {
     #[n(0)]
     EnvelopeTagged(#[n(0)] SuitEnvelope),
     #[n(1)]
@@ -98,13 +90,19 @@ pub enum SuitStart{
     #[n(2)]
     Start,
 }
-impl<'b> Decode<'b,()> for SuitStart {
+impl<'b> Decode<'b, ()> for SuitStart {
     fn decode(d: &mut Decoder<'b>, ctx: &mut ()) -> Result<Self, minicbor::decode::Error> {
         match d.tag()?.as_u64() {
-            107 => Ok(SuitStart::EnvelopeTagged(d.decode_with::<(), SuitEnvelope>(ctx)?)),
-            1070 => Ok(SuitStart::ManifestTagged(d.decode_with::<(), SuitManifest>(ctx)?)),
+            107 => Ok(SuitStart::EnvelopeTagged(
+                d.decode_with::<(), SuitEnvelope>(ctx)?,
+            )),
+            1070 => Ok(SuitStart::ManifestTagged(
+                d.decode_with::<(), SuitManifest>(ctx)?,
+            )),
             0 => Ok(SuitStart::Start),
-            other => Err(minicbor::decode::Error::message(format!("unexpected tag {}", other))),
+            other => Err(minicbor::decode::Error::message(format!(
+                "unexpected tag {other}"
+            ))),
         }
     }
 }
@@ -122,7 +120,7 @@ pub struct SuitEnvelope {
 }
 
 #[derive(Debug, Encode, Decode)]
-struct SuitPayload{
+struct SuitPayload {
     #[n(0)]
     key: String,
     #[n(1)]
@@ -135,20 +133,28 @@ struct SuitAuthentication {
     #[n(0)]
     digest: BstrCbor<SuitDigest>,
     #[n(1)]
-    authentications_keys: BstrCbor<SuitAuthenticationBlock>, //TODO  zero or more
+    authentications_keys: Option<BstrCbor<SuitAuthenticationBlock>>, //TODO  zero or more
 }
 
 impl<'b, Ctx> Decode<'b, Ctx> for SuitAuthenticationBlock {
     fn decode(d: &mut Decoder<'b>, ctx: &mut Ctx) -> Result<Self, minicbor::decode::Error> {
         match d.tag()?.as_u64() {
-            98 => Ok(SuitAuthenticationBlock::Sign(d.decode_with::<Ctx, CoseSign>(ctx)?)),
-            18 => {
-                Ok(SuitAuthenticationBlock::Sign1(d.decode_with::<Ctx, CoseSign1>(ctx)?))
-            }
-            97 => Ok(SuitAuthenticationBlock::Mac(d.decode_with::<Ctx, CoseMac>(ctx)?)),
-            17 => Ok(SuitAuthenticationBlock::Mac0(d.decode_with::<Ctx, CoseMac0>(ctx)?)),
+            98 => Ok(SuitAuthenticationBlock::Sign(
+                d.decode_with::<Ctx, CoseSign>(ctx)?,
+            )),
+            18 => Ok(SuitAuthenticationBlock::Sign1(
+                d.decode_with::<Ctx, CoseSign1>(ctx)?,
+            )),
+            97 => Ok(SuitAuthenticationBlock::Mac(
+                d.decode_with::<Ctx, CoseMac>(ctx)?,
+            )),
+            17 => Ok(SuitAuthenticationBlock::Mac0(
+                d.decode_with::<Ctx, CoseMac0>(ctx)?,
+            )),
 
-            other => Err(minicbor::decode::Error::message(format!("unexpected tag {}", other))),
+            other => Err(minicbor::decode::Error::message(format!(
+                "unexpected tag {other}"
+            ))),
         }
     }
 }
@@ -265,7 +271,7 @@ pub struct CoseMac0 {
     pub protected: ByteVec,
 
     #[n(1)]
-    pub unprotected:  HashMap<String,String>,
+    pub unprotected: HashMap<String, String>,
 
     #[n(2)]
     pub payload: Option<ByteVec>,
@@ -301,24 +307,43 @@ pub enum SuitAlgorithmId {
     Shake256,
 }
 
-
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
 pub struct SuitManifest {
     #[n(1)]
     version: u64, // must be 1
+
     #[n(2)]
     sequence_number: u64,
+
     #[n(3)]
     common: BstrCbor<SuitCommon>,
+
     #[n(4)]
     reference_uri: Option<String>,
 
-    #[n(5)]
-    unsev_mem: Option<SuitUnseverableMembers>,
+    // Unseverable members (top-level keys in manifest: 7,8,9)
+    // SUIT_Unseverable_Members are not under a single key: they are individual optional keys.
+    #[n(7)]
+    validate: Option<BstrCbor<SuitCommandSequence>>, // ? suit-validate
 
-    #[n(6)]
-    sev_mem_choice: Option<SuitSeverableMembersChoice>,
+    #[n(8)]
+    load: Option<BstrCbor<SuitCommandSequence>>, // ? suit-load
+
+    #[n(9)]
+    invoke: Option<BstrCbor<SuitCommandSequence>>, // ? suit-invoke
+
+    // Severable members choice (top-level keys: 16,20,23)
+    // each may be a Digest or a bstr.cbor SUIT_Command_Sequence / SUIT_Text_Map
+    #[n(16)]
+    payload_fetch: Option<DigestOrCbor<BstrCbor<SuitCommandSequence>>>,
+
+    #[n(20)]
+    install: Option<DigestOrCbor<BstrCbor<SuitCommandSequence>>>,
+
+    #[n(23)]
+    text: Option<DigestOrCbor<BstrCbor<SuitTextMap>>>,
+    // Any future extensions will be ignored/omitted by derive (or add a catch-all decode if needed)
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -336,48 +361,56 @@ struct SuitSeverableManifestMembers {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
-pub struct SuitIntegratedPayload<'a>{
+pub struct SuitIntegratedPayload<'a> {
     #[n(0)]
     key: &'a ByteSlice,
     #[n(1)]
     value: &'a str,
 }
-#[derive(Debug, Encode, Decode)]
-#[cbor(map)]
-struct SuitUnseverableMembers {
-    #[n(7)]
-    validate: Option<BstrCbor<SuitCommandSequence>>,
-    #[n(8)]
-    load: Option<BstrCbor<SuitCommandSequence>>,
-    #[n(9)]
-    invoke: Option<BstrCbor<SuitCommandSequence>>,
-}
-#[derive(Debug, Encode, Decode)]
-#[cbor(map)]
-struct SuitSeverableMembersChoice {
-    #[n(16)]
-    payload_fetch: Option<DigestOr<BstrCbor<SuitCommandSequence>>>,
-    #[n(20)]
-    install: Option<DigestOr<BstrCbor<SuitCommandSequence>>>,
-    #[n(23)]
-    text: Option<DigestOr<BstrCbor<SuitTextMap>>>,
-}
 
-#[derive(Debug, Encode, Decode)]
-enum DigestOr<T>{
+#[derive(Debug, Encode)]
+enum DigestOrCbor<T> {
     #[n(1)]
-    Digest(#[n(0)]SuitDigest),
+    Digest(#[n(0)] SuitDigest),
     #[n(2)]
-    Cbor(#[n(0)]T),
+    Cbor(#[n(0)] T),
+}
+
+impl<'b, Ctx, T> Decode<'b, Ctx> for DigestOrCbor<T>
+where
+    T: Decode<'b, Ctx>,
+{
+    fn decode(d: &mut Decoder<'b>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
+        match d.datatype()? {
+            // bstr.cbor case (or generic bytes wrapper for the CBOR value)
+            // Call T::decode on the current decoder: if T is BstrCbor<>,
+            // it will call d.bytes() and then decode the inner CBOR.
+            Type::Bytes => {
+                let t = T::decode(d, ctx)?;
+                Ok(DigestOrCbor::Cbor(t))
+            }
+
+            // Digest is encoded as a CBOR array [algorithm_id, bytes]
+            // so we expect an Array here and decode SuitDigest
+            Type::Array => {
+                let digest = SuitDigest::decode(d, ctx)?;
+                Ok(DigestOrCbor::Digest(digest))
+            }
+
+            other => Err(DecodeError::message(format!(
+                "unexpected type for DigestOrCbor: {other:?} (expected bstr.cbor or Digest array)"
+            ))),
+        }
+    }
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
-struct SuitCommon{
+struct SuitCommon {
     #[n(2)]
-    components: SuitComponents, // += at least 1
+    components: SuitComponents, // TODO += at least 1
     #[n(4)]
-    shared_seq: Option<BstrCbor<Debug<SuitSharedSequence>>>,
+    shared_seq: Option<BstrCbor<SuitSharedSequence>>,
 }
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
@@ -389,47 +422,44 @@ struct ComponentIdentifier(Vec<ByteVec>);
 
 #[derive(Debug, Encode)]
 #[cbor(transparent)]
-struct SuitSharedSequence(Debug<Vec<SharedSequenceItem>>); // + = at least 1
+struct SuitSharedSequence(Vec<SharedSequenceItem>); // + = at least 1
 
 // We implement this to decode because the shared sequence is flat encoded
 // it means [key, value, key, value] instead of [[key,value],[key, value]]
 impl<'b, Ctx> Decode<'b, Ctx> for SuitSharedSequence {
     fn decode(d: &mut Decoder<'b>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
-        let arr_len = d.array()?; // Option<u64>
-        let mut items = Vec::new();
+        let mut items: Vec<SharedSequenceItem> = Vec::new();
 
-        // helper that decodes one op (op id + its single top-level argument)
-        let decode_one = |d: &mut Decoder<'b>, ctx: &mut Ctx, items: &mut Vec<SharedSequenceItem>| -> Result<(), DecodeError> {
-            // expect an unsigned int op id
-            let op = match d.datatype()? {
-                data::Type::U16 | data::Type::U32 | data::Type::U8 | data::Type::U64 => d.u64()?,
-                other => return Err(DecodeError::message(format!("expected op id (unsigned int) but got {:?}", other))),
-            };
-
+        // handler closure called for each op; it must consume the argument.
+        decode_flat_pairs(d, ctx, |op, dec, ctx| {
             match op {
                 // Commands
                 12 => {
-                    let idx = IndexArg::decode(d, ctx)?;
-                    println!("debug");
-                    items.push(SharedSequenceItem::Command(SuitSharedCommand::SetComponentIndex(idx)));
+                    let idx = IndexArg::decode(dec, ctx)?;
+                    items.push(SharedSequenceItem::Command(
+                        SuitSharedCommand::SetComponentIndex(idx),
+                    ));
                 }
                 32 => {
-                    let seq = BstrCbor::<SuitSharedSequence>::decode(d, ctx)?;
-                    items.push(SharedSequenceItem::Command(SuitSharedCommand::RunSequence(seq)));
+                    let seq = BstrCbor::<SuitSharedSequence>::decode(dec, ctx)?;
+                    items.push(SharedSequenceItem::Command(SuitSharedCommand::RunSequence(
+                        seq,
+                    )));
                 }
                 15 => {
-                    let arg = SuitDirectiveTryEachArgumentShared::decode(d, ctx)?;
+                    let arg = SuitDirectiveTryEachArgumentShared::decode(dec, ctx)?;
                     items.push(SharedSequenceItem::Command(SuitSharedCommand::TryEach(arg)));
                 }
                 20 => {
-                    let params = SuitParameters::decode(d, ctx)?;
-                    println!("debug");
-                    items.push(SharedSequenceItem::Command(SuitSharedCommand::OverrideParameters(params)));
+                    let params = SuitParameters::decode(dec, ctx)?;
+                    items.push(SharedSequenceItem::Command(
+                        SuitSharedCommand::OverrideParameters(params),
+                    ));
                 }
 
-                // Conditions
+                // Conditions (all consume SuitRepPolicy)
                 1 | 2 | 3 | 5 | 6 | 14 | 24 => {
-                    let policy = SuitRepPolicy::decode(d, ctx)?;
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
                     let cond = match op {
                         1 => SuitCondition::VendorIdentifier(policy),
                         2 => SuitCondition::ClassIdentifier(policy),
@@ -444,43 +474,16 @@ impl<'b, Ctx> Decode<'b, Ctx> for SuitSharedSequence {
                 }
 
                 other => {
-                    return Err(DecodeError::message(format!("unknown shared-sequence op id {}", other)));
+                    return Err(DecodeError::message(format!(
+                        "unknown shared-sequence op id {other}"
+                    )));
                 }
             }
-
             Ok(())
-        };
-
-        if let Some(n) = arr_len {
-            // definite-length array: iterate until we've consumed exactly `n` top-level items.
-            // Each op in this format is encoded as two top-level items: [ op_id, argument ]
-            let mut consumed: u64 = 0;
-            while consumed < n {
-                // decode one op (consumes op id + single top-level argument)
-                decode_one(d, ctx, &mut items)?;
-                // increment consumed by 2 (op + argument)
-                consumed = consumed.checked_add(2).ok_or_else(|| DecodeError::message("array length overflow"))?;
-            }
-
-            if consumed != n {
-                // defensive: if the encoding is not matching expectation, return an error
-                return Err(DecodeError::message(format!("expected to consume {} elements but consumed {}", n, consumed)));
-            }
-        } else {
-            // indefinite-length array: loop until Break token
-            loop {
-                if let data::Type::Break = d.datatype()? {
-                    // stop at Break (leave consumption of break token to decoder internals if required)
-                    break;
-                }
-                decode_one(d, ctx, &mut items)?;
-            }
-        }
-
-        Ok(SuitSharedSequence(Debug(items)))
+        })?;
+        Ok(SuitSharedSequence(items))
     }
 }
-
 
 #[derive(Debug, Encode, Decode)]
 enum SharedSequenceItem {
@@ -490,30 +493,32 @@ enum SharedSequenceItem {
     Command(#[n(0)] SuitSharedCommand),
 }
 
-
 #[derive(Debug, Encode, Decode)]
 enum SuitSharedCommand {
     #[n(12)]
     SetComponentIndex(#[n(0)] IndexArg),
     #[n(32)]
-    RunSequence(#[n(0)]BstrCbor<SuitSharedSequence>),
+    RunSequence(#[n(0)] BstrCbor<SuitSharedSequence>),
     #[n(15)]
     TryEach(#[n(0)] SuitDirectiveTryEachArgumentShared),
     #[n(20)]
-    OverrideParameters(#[n(0)] SuitParameters), // should 1 +
+    OverrideParameters(#[n(0)] SuitParameters), // TODO should 1 +
 }
 
 #[derive(Debug, Encode)]
 enum IndexArg {
     #[n(0)]
-    Single(#[n(0)] u64),   // uint
+    Single(#[n(0)] u64), // uint
     #[n(1)]
-    True(#[n(0)] bool),         // true
+    True(#[n(0)] bool), // true
     #[n(2)]
     Multiple(#[n(0)] Vec<u64>), // [+uint]
 }
 impl<'b, Ctx> minicbor::Decode<'b, Ctx> for IndexArg {
-    fn decode(d: &mut minicbor::Decoder<'b>, _ctx: &mut Ctx) -> Result<Self, minicbor::decode::Error> {
+    fn decode(
+        d: &mut minicbor::Decoder<'b>,
+        _ctx: &mut Ctx,
+    ) -> Result<Self, minicbor::decode::Error> {
         use minicbor::data;
 
         match d.datatype()? {
@@ -546,57 +551,161 @@ impl<'b, Ctx> minicbor::Decode<'b, Ctx> for IndexArg {
             }
 
             other => Err(minicbor::decode::Error::message(format!(
-                "unexpected type for IndexArg: {:?}",
-                other
+                "unexpected type for IndexArg: {other:?}"
             ))),
         }
     }
 }
 
 #[derive(Debug, Encode, Decode)]
-#[cbor(array)]
+#[cbor(transparent)]
 struct SuitDirectiveTryEachArgumentShared {
-    #[n(0)]
-    sequences: Vec<BstrCbor<SuitSharedSequence>>, // 2* bstr.cbor SUIT_Shared_Sequence
-    #[n(1)]
-    optional_nil: Option<()>, // ?nil
+    sequences: Option<Vec<BstrCbor<SuitSharedSequence>>>, // 2* bstr.cbor SUIT_Shared_Sequence
 }
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Encode)]
 #[cbor(transparent)]
+// Implement
 struct SuitCommandSequence {
     item: Vec<SuitCommand>,
+}
+impl<'b, Ctx> Decode<'b, Ctx> for SuitCommandSequence {
+    fn decode(d: &mut Decoder<'b>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
+        let mut items: Vec<SuitCommand> = Vec::new();
+        decode_flat_pairs(d, ctx, |op, dec, ctx| {
+            match op {
+                // Conditions
+                1 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Condition(SuitCondition::VendorIdentifier(
+                        policy,
+                    )));
+                }
+                2 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Condition(SuitCondition::ClassIdentifier(
+                        policy,
+                    )));
+                }
+                3 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Condition(SuitCondition::ImageMatch(policy)));
+                }
+                5 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Condition(SuitCondition::ComponentSlot(policy)));
+                }
+                6 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Condition(SuitCondition::CheckContent(policy)));
+                }
+                14 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Condition(SuitCondition::Abort(policy)));
+                }
+                24 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Condition(SuitCondition::DeviceIdentifier(
+                        policy,
+                    )));
+                }
+
+                // Directives
+                18 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Directive(SuitDirective::Write(policy)));
+                }
+                12 => {
+                    let idx = IndexArg::decode(dec, ctx)?;
+                    items.push(SuitCommand::Directive(SuitDirective::SetComponentIndex(
+                        idx,
+                    )));
+                }
+                32 => {
+                    let seq = BstrCbor::<SuitCommandSequence>::decode(dec, ctx)?;
+                    items.push(SuitCommand::Directive(SuitDirective::RunSequence(seq)));
+                }
+                15 => {
+                    let arg = SuitDirectiveTryEachArgument::decode(dec, ctx)?;
+                    items.push(SuitCommand::Directive(SuitDirective::TryEach(arg)));
+                }
+                20 => {
+                    let params = SuitParameters::decode(dec, ctx)?;
+                    items.push(SuitCommand::Directive(SuitDirective::OverrideParameters(
+                        params,
+                    )));
+                }
+                21 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Directive(SuitDirective::Fetch(policy)));
+                }
+                22 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Directive(SuitDirective::Copy(policy)));
+                }
+                31 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Directive(SuitDirective::Swap(policy)));
+                }
+                23 => {
+                    let policy = SuitRepPolicy::decode(dec, ctx)?;
+                    items.push(SuitCommand::Directive(SuitDirective::Invoke(policy)));
+                }
+
+                // Custom commands (negative int keys)
+                other if other < 0 => {
+                    let v = CommandCustomValue::decode(dec, ctx)?;
+                    items.push(SuitCommand::Custom(v));
+                }
+
+                unknown => {
+                    return Err(DecodeError::message(format!(
+                        "unknown command op id {unknown}"
+                    )));
+                }
+            }
+            Ok(())
+        })?;
+        Ok(SuitCommandSequence { item: items })
+    }
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(array)]
 enum SuitCommand {
     #[n(0)]
-    Condition(#[n(0)]SuitCondition),
+    Condition(#[n(0)] SuitCondition),
     #[n(1)]
-    Directive(#[n(0)]SuitDirective),
+    Directive(#[n(0)] SuitDirective),
     #[n(2)]
-    Custom(#[n(0)]CommandCustomValue),
+    Custom(#[n(0)] CommandCustomValue),
 }
-
 
 #[derive(Debug, Encode)]
 enum CommandCustomValue {
     #[n(0)]
-    Bytes(#[n(0)]Vec<u8>),
+    Bytes(#[n(0)] Vec<u8>),
     #[n(1)]
-    Text(#[n(0)]String),
+    Text(#[n(0)] String),
     #[n(2)]
-    Integer(#[n(0)]i64),
+    Integer(#[n(0)] i64),
     #[n(3)]
     Nil,
 }
 impl<'b, Ctx> minicbor::Decode<'b, Ctx> for CommandCustomValue {
-    fn decode(d: &mut minicbor::Decoder<'b>, _ctx: &mut Ctx) -> Result<Self, minicbor::decode::Error> {
+    fn decode(
+        d: &mut minicbor::Decoder<'b>,
+        _ctx: &mut Ctx,
+    ) -> Result<Self, minicbor::decode::Error> {
         use minicbor::data;
 
         // debug helper
-        eprintln!("CommandCustomValue: pos={:?}, next={:?}, remaining={}", d.position(), d.datatype()?, minicbor::display(d.input()));
+        eprintln!(
+            "CommandCustomValue: pos={:?}, next={:?}, remaining={}",
+            d.position(),
+            d.datatype()?,
+            minicbor::display(d.input())
+        );
 
         match d.datatype()? {
             data::Type::Bytes => {
@@ -625,8 +734,7 @@ impl<'b, Ctx> minicbor::Decode<'b, Ctx> for CommandCustomValue {
             }
 
             other => Err(minicbor::decode::Error::message(format!(
-                "unexpected type for CommandCustomValue: {:?}",
-                other
+                "unexpected type for CommandCustomValue: {other:?}"
             ))),
         }
     }
@@ -634,11 +742,9 @@ impl<'b, Ctx> minicbor::Decode<'b, Ctx> for CommandCustomValue {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-struct SuitRepPolicy(
-    #[cbor(with="impl_for_bitflags")]
-    SuitReportingBits);
+struct SuitRepPolicy(#[cbor(with = "impl_for_bitflags")] SuitReportingBits);
 
-bitflags::bitflags!  {
+bitflags::bitflags! {
     #[derive(Debug)]
     struct SuitReportingBits: u8 {
         const SEND_RECORD_SUCCESS  = 0b0001;
@@ -647,22 +753,24 @@ bitflags::bitflags!  {
         const SEND_SYSINFO_FAILURE = 0b1000;
     }
 }
-mod impl_for_bitflags{
-    use minicbor::{decode::Error, Decoder};
+mod impl_for_bitflags {
     use super::*;
-    pub fn encode<W: minicbor::encode::Write, Ctx>(val: &SuitReportingBits, e: &mut Encoder<W>, _: &mut Ctx) -> Result<(), minicbor::encode::Error<W::Error>> {
+    use minicbor::{decode::Error, Decoder};
+    pub fn encode<W: minicbor::encode::Write, Ctx>(
+        val: &SuitReportingBits,
+        e: &mut Encoder<W>,
+        _: &mut Ctx,
+    ) -> Result<(), minicbor::encode::Error<W::Error>> {
         e.u8(val.bits())?;
         println!("bytes decoded");
         Ok(())
     }
-
 
     pub fn decode<'b, Ctx>(d: &mut Decoder<'b>, _: &mut Ctx) -> Result<SuitReportingBits, Error> {
         let bits = d.u8()?;
         Ok(SuitReportingBits::from_bits_truncate(bits))
     }
 }
-
 
 #[derive(Debug, Encode, Decode)]
 enum SuitCondition {
@@ -687,7 +795,6 @@ enum SuitCondition {
     #[n(24)]
     DeviceIdentifier(#[n(0)] SuitRepPolicy),
 }
-
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
@@ -722,11 +829,13 @@ enum SuitDirective {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-struct SuitDirectiveTryEachArgument(Vec<SuitCommandSequence>);
-
+struct SuitDirectiveTryEachArgument(Vec<BstrCbor<SuitCommandSequence>>);
 
 /// Helper : accept RFC4122 UUID (bstr len 16) or cbor-pen tag (#6.112 (bstr))
-pub fn decode_uuid_or_cborpen<'b, Ctx>(d: &mut Decoder<'b>, _ctx: &mut Ctx) -> Result<Option<Vec<u8>>, DecodeError> {
+pub fn decode_uuid_or_cborpen<'b, Ctx>(
+    d: &mut Decoder<'b>,
+    _ctx: &mut Ctx,
+) -> Result<Option<Vec<u8>>, DecodeError> {
     match d.datatype()? {
         minicbor::data::Type::Tag => {
             let t = d.tag()?;
@@ -736,14 +845,18 @@ pub fn decode_uuid_or_cborpen<'b, Ctx>(d: &mut Decoder<'b>, _ctx: &mut Ctx) -> R
                 uuid.extend_from_slice(b);
                 Ok(Some(uuid))
             } else {
-                Err(minicbor::decode::Error::message("expected tag 112 for cbor-pen"))
+                Err(minicbor::decode::Error::message(
+                    "expected tag 112 for cbor-pen",
+                ))
             }
         }
         minicbor::data::Type::Bytes => {
             let b = d.bytes()?;
             Ok(Some(b.to_vec()))
         }
-        other => Err(minicbor::decode::Error::message(&format!("expected UUID or cbor-pen, got {:?}", other))),
+        other => Err(minicbor::decode::Error::message(format!(
+            "expected UUID or cbor-pen, got {other:?}"
+        ))),
     }
 }
 
@@ -751,8 +864,8 @@ pub fn decode_uuid_or_cborpen<'b, Ctx>(d: &mut Decoder<'b>, _ctx: &mut Ctx) -> R
 #[cbor(map)]
 struct SuitParameters {
     #[n(1)]
-    #[cbor(decode_with="decode_uuid_or_cborpen")]
-    vendor_identifier: Option<Vec<u8>>,             // Rfc4122Uuid / cbor-pen
+    #[cbor(decode_with = "decode_uuid_or_cborpen")]
+    vendor_identifier: Option<Vec<u8>>, // Rfc4122Uuid / cbor-pen
     #[n(2)]
     class_identifier: Option<Rfc4122Uuid>,
     #[n(3)]
@@ -777,9 +890,7 @@ struct SuitParameters {
     device_identifier: Option<Rfc4122Uuid>,
     #[n(25)]
     fetch_args: Option<ByteVec>,
-
     // custom: Option<CustomParameterValue,
-
 }
 
 // #[derive(Debug, Clone, Encode, Decode)]
@@ -794,32 +905,29 @@ struct SuitParameters {
 //     Bytes(#[n(0)] Vec<u8>),
 // }
 
-
-#[derive(Debug, Encode,  Hash, Eq, PartialEq)]
+#[derive(Debug, Encode, Hash, Eq, PartialEq)]
 #[cbor(transparent)]
 struct Tag38LTag(String);
 
 // Only accept regex matching tags
-impl<'b, C> Decode<'b,C> for Tag38LTag {
+impl<'b, C> Decode<'b, C> for Tag38LTag {
     fn decode(d: &mut Decoder<'b>, _: &mut C) -> Result<Self, DecodeError> {
         let tag = String::from_utf8_lossy(d.bytes()?);
         let re = Regex::new(r"^[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*$").unwrap();
         if re.is_match(&tag) {
             return Ok(Tag38LTag(tag.into_owned()));
-        } {
-            return Err(DecodeError::message("Invalid tag38-ltag format"));
         }
-
+        {
+            Err(DecodeError::message("Invalid tag38-ltag format"))
+        }
     }
 }
-
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitTextMap {
     entries: Vec<(Tag38LTag, SuitTextLMap)>,
 }
-
 
 #[derive(Debug, Encode, Decode)]
 struct SuitTextLMap {
@@ -849,8 +957,6 @@ struct SuitTextComponentKeys {
 #[derive(Debug, Encode, Decode, Hash, Eq, PartialEq)]
 #[cbor(transparent)]
 pub struct SuitComponentIdentifier(String);
-
-
 
 #[derive(Debug, Decode, Encode)]
 #[cbor(map)]
