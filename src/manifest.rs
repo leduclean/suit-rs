@@ -1,12 +1,12 @@
 use crate::flat_ops::decode_flat_pairs;
 use core::marker::PhantomData;
 use minicbor::{
+    Decode, Decoder, Encode, Encoder,
     bytes::{ByteArray, ByteSlice, ByteVec},
     data::Type,
     decode::Error as DecodeError,
     display,
     encode::Error as EncodeError,
-    Decode, Decoder, Encode, Encoder,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -446,25 +446,27 @@ impl<'b, Ctx> Decode<'b, Ctx> for SuitSharedSequence<'b> {
                 // Commands
                 12 => {
                     let idx = IndexArg::decode(dec, ctx)?;
-                    items.push(SharedSequenceItem::Command(
+                    items.push(SharedSequenceItem::Command(Box::new(
                         SuitSharedCommand::SetComponentIndex(idx),
-                    ));
+                    )));
                 }
                 32 => {
                     let seq = LazyCbor::<SuitSharedSequence>::decode(dec, ctx)?;
-                    items.push(SharedSequenceItem::Command(SuitSharedCommand::RunSequence(
-                        seq,
+                    items.push(SharedSequenceItem::Command(Box::new(
+                        SuitSharedCommand::RunSequence(seq),
                     )));
                 }
                 15 => {
                     let arg = SuitDirectiveTryEachArgumentShared::decode(dec, ctx)?;
-                    items.push(SharedSequenceItem::Command(SuitSharedCommand::TryEach(arg)));
+                    items.push(SharedSequenceItem::Command(Box::new(
+                        SuitSharedCommand::TryEach(arg),
+                    )));
                 }
                 20 => {
                     let params = SuitParameters::decode(dec, ctx)?;
-                    items.push(SharedSequenceItem::Command(
+                    items.push(SharedSequenceItem::Command(Box::new(
                         SuitSharedCommand::OverrideParameters(params),
-                    ));
+                    )));
                 }
 
                 // Conditions (all consume SuitRepPolicy)
@@ -502,7 +504,7 @@ enum SharedSequenceItem<'b> {
     #[n(1)]
     Command(
         #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
-        SuitSharedCommand<'b>,
+        Box<SuitSharedCommand<'b>>,
     ),
 }
 
@@ -776,7 +778,7 @@ bitflags::bitflags! {
 }
 mod impl_for_bitflags {
     use super::*;
-    use minicbor::{decode::Error, Decoder};
+    use minicbor::{Decoder, decode::Error};
     pub fn encode<W: minicbor::encode::Write, Ctx>(
         val: &SuitReportingBits,
         e: &mut Encoder<W>,
@@ -941,9 +943,7 @@ impl<'b, C> Decode<'b, C> for Tag38LTag {
         if re.is_match(&tag) {
             return Ok(Tag38LTag(tag.into_owned()));
         }
-        {
-            Err(DecodeError::message("Invalid tag38-ltag format"))
-        }
+        Err(DecodeError::message("Invalid tag38-ltag format"))
     }
 }
 
