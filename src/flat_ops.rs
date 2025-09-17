@@ -1,7 +1,7 @@
 //! Helpers to decode "flat" op/arg sequences used by SUIT:
 //! - SUIT_Shared_Sequence (flat: [ op, arg, op, arg, ... ])
 //! - SUIT_Command_Sequence (flat: [ op, arg, op, arg, ... ])
-use minicbor::{data::Type, decode::Error as DecodeError, display, Decoder};
+use minicbor::{Decoder, data::Type, decode::Error as DecodeError, display};
 
 pub fn decode_flat_pairs<'b, Ctx, F>(
     d: &mut Decoder<'b>,
