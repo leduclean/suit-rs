@@ -12,7 +12,7 @@ pre-commit="""sh -lc '
     case "$file" in
       *.rs)
         [ -f "$file" ] || continue
-        rustfmt "$file" || { echo "❌ rustfmt failed on $file"; exit 1; }
+        cargo fmt --all -- "$file" || { echo "❌ rustfmt failed on $file"; exit 1; }
         git add -- "$file"
         ;;
     esac
