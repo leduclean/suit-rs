@@ -1,31 +1,31 @@
-use core::marker::PhantomData;
 use minicbor::{
     Decode, Decoder, Encode, Encoder, decode::Error as DecodeError, encode::Error as EncodeError,
 };
+use once_cell::unsync::OnceCell;
 
 /// Lazy wrapper: on decode, for .bstr cbor T, we store the bytes slice but do NOT decode inner T.
-/// Call `.decode_inner(ctx)` to decode T later if you need acces to data.
-// we borrow a bstr so we need #[b()] instead of #[n()] of each struct using this
+/// Call `.get()` to decode T later if you need acces to data.
+// We borrow a bstr below so we need #[b()] instead of #[n()] of each struct using LazyCbor
 #[derive(Debug)]
-pub struct LazyCbor<'b, T: 'b> {
-    pub bytes: &'b [u8],
-    _ty: PhantomData<&'b T>, // We use phantom data that any reference in T are valid for 'b (the bstr entry)
+pub struct LazyCbor<'a, T: 'a> {
+    bytes: &'a [u8],
+    cache: OnceCell<T>, // Will store the structure after first get()
 }
 
-impl<'b, T, Ctx> Decode<'b, Ctx> for LazyCbor<'b, T>
+impl<'a, 'bytes: 'a, T, Ctx> Decode<'bytes, Ctx> for LazyCbor<'a, T>
 where
-    // T must itself implement decoding so we can decode on demand
-    T: Decode<'b, Ctx>,
+    T: Decode<'a, Ctx>,
 {
-    fn decode(d: &mut Decoder<'b>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
-        let bytes = d.bytes()?; // returns &'b [u8] (handles definite/indefinite)
+    fn decode(d: &mut Decoder<'bytes>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
+        let bytes: &'bytes [u8] = d.bytes()?;
         Ok(LazyCbor {
             bytes,
-            _ty: PhantomData,
+            cache: OnceCell::new(),
         })
     }
 }
-impl<'b, T, Ctx> Encode<Ctx> for LazyCbor<'b, T>
+
+impl<'a, T, Ctx> Encode<Ctx> for LazyCbor<'a, T>
 where
     T: Encode<Ctx>,
 {
@@ -39,13 +39,18 @@ where
     }
 }
 
-// helper to decode when needed:
-impl<'b, T> LazyCbor<'b, T> {
-    pub fn decode_inner<C>(&self, ctx: &mut C) -> Result<T, DecodeError>
+/// Getter to decode inner T when needed. On first call,
+/// it will store the data in cache for next calls
+impl<'a, T> LazyCbor<'a, T> {
+    pub fn get(&self) -> Result<&T, DecodeError>
     where
-        T: Decode<'b, C>,
+        T: Decode<'a, ()>,
     {
-        let mut sub = Decoder::new(self.bytes);
-        T::decode(&mut sub, ctx)
+        // Using OnceCell allows us to init the cache
+        // without a &mut self reference (unsafe)
+        self.cache.get_or_try_init(|| {
+            let mut decoder = Decoder::new(self.bytes);
+            T::decode(&mut decoder, &mut ())
+        })
     }
 }
