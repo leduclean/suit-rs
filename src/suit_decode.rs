@@ -5,22 +5,22 @@ use crate::suit_manifest::*;
 use minicbor::{Decode, Decoder, data::Type, decode::Error as DecodeError, display};
 use regex::Regex;
 
-impl<'b, T, Ctx> Decode<'b, Ctx> for Debug<T>
+impl<'a, T, Ctx> Decode<'a, Ctx> for Debug<T>
 where
-    T: Decode<'b, Ctx>,
+    T: Decode<'a, ()>,
 {
-    fn decode(d: &mut Decoder<'b>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
+    fn decode(d: &mut Decoder<'a>, _: &mut Ctx) -> Result<Self, DecodeError> {
         println!("Decoding struct: {}", core::any::type_name::<Self>());
         println!("Decoding with debug...");
         let bytes = d.input();
         println!("Shared sequence raw: {}", display(bytes));
-        let inner = T::decode(d, ctx)?;
+        let inner = T::decode(d, &mut ())?;
         Ok(Debug(inner))
     }
 }
 
-impl<'b> Decode<'b, ()> for SuitStart<'b> {
-    fn decode(d: &mut Decoder<'b>, ctx: &mut ()) -> Result<Self, minicbor::decode::Error> {
+impl<'a> Decode<'a, ()> for SuitStart<'a> {
+    fn decode(d: &mut Decoder<'a>, ctx: &mut ()) -> Result<Self, minicbor::decode::Error> {
         match d.tag()?.as_u64() {
             107 => Ok(SuitStart::EnvelopeTagged(
                 d.decode_with::<(), SuitEnvelope>(ctx)?,
@@ -36,8 +36,8 @@ impl<'b> Decode<'b, ()> for SuitStart<'b> {
     }
 }
 
-impl<'b, Ctx> Decode<'b, Ctx> for SuitAuthenticationBlock {
-    fn decode(d: &mut Decoder<'b>, ctx: &mut Ctx) -> Result<Self, minicbor::decode::Error> {
+impl<'a, Ctx> Decode<'a, Ctx> for SuitAuthenticationBlock {
+    fn decode(d: &mut Decoder<'a>, ctx: &mut Ctx) -> Result<Self, minicbor::decode::Error> {
         match d.tag()?.as_u64() {
             98 => Ok(SuitAuthenticationBlock::Sign(
                 d.decode_with::<Ctx, CoseSign>(ctx)?,
@@ -59,14 +59,14 @@ impl<'b, Ctx> Decode<'b, Ctx> for SuitAuthenticationBlock {
     }
 }
 
-impl<'b, Ctx, T> Decode<'b, Ctx> for DigestOrCbor<T>
+impl<'a, Ctx, T> Decode<'a, Ctx> for DigestOrCbor<T>
 where
-    T: Decode<'b, Ctx>,
+    T: Decode<'a, Ctx>,
 {
-    fn decode(d: &mut Decoder<'b>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
+    fn decode(d: &mut Decoder<'a>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
         match d.datatype()? {
             // bstr.cbor case (or generic bytes wrapper for the CBOR value)
-            // Call T::decode on the current decoder: if T is LazyCbor<'b, >,
+            // Call T::decode on the current decoder: if T is LazyCbor<'a, >,
             // it will call d.bytes() and then decode the inner CBOR.
             Type::Bytes => {
                 let t = T::decode(d, ctx)?;
@@ -89,9 +89,9 @@ where
 
 // We implement this to decode because the shared sequence is flat encoded
 // it means [key, value, key, value] instead of [[key,value],[key, value]]
-impl<'b, Ctx> Decode<'b, Ctx> for SuitSharedSequence<'b> {
-    fn decode(d: &mut Decoder<'b>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
-        let mut items: Vec<SharedSequenceItem<'b>> = Vec::new();
+impl<'a, Ctx> Decode<'a, Ctx> for SuitSharedSequence<'a> {
+    fn decode(d: &mut Decoder<'a>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
+        let mut items: Vec<SharedSequenceItem<'a>> = Vec::new();
 
         // handler closure called for each op; it must consume the argument.
         decode_flat_pairs(d, ctx, |op, dec, ctx| {
@@ -150,9 +150,9 @@ impl<'b, Ctx> Decode<'b, Ctx> for SuitSharedSequence<'b> {
     }
 }
 
-impl<'b, Ctx> minicbor::Decode<'b, Ctx> for IndexArg {
+impl<'a, Ctx> minicbor::Decode<'a, Ctx> for IndexArg {
     fn decode(
-        d: &mut minicbor::Decoder<'b>,
+        d: &mut minicbor::Decoder<'a>,
         _ctx: &mut Ctx,
     ) -> Result<Self, minicbor::decode::Error> {
         use minicbor::data;
@@ -193,8 +193,8 @@ impl<'b, Ctx> minicbor::Decode<'b, Ctx> for IndexArg {
     }
 }
 
-impl<'b, Ctx> Decode<'b, Ctx> for SuitCommandSequence<'b> {
-    fn decode(d: &mut Decoder<'b>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
+impl<'a, Ctx> Decode<'a, Ctx> for SuitCommandSequence<'a> {
+    fn decode(d: &mut Decoder<'a>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
         let mut items: Vec<SuitCommand> = Vec::new();
         decode_flat_pairs(d, ctx, |op, dec, ctx| {
             match op {
@@ -246,7 +246,7 @@ impl<'b, Ctx> Decode<'b, Ctx> for SuitCommandSequence<'b> {
                     )));
                 }
                 32 => {
-                    let seq = LazyCbor::<SuitCommandSequence<'b>>::decode(dec, ctx)?;
+                    let seq = LazyCbor::<SuitCommandSequence<'a>>::decode(dec, ctx)?;
                     items.push(SuitCommand::Directive(SuitDirective::RunSequence(seq)));
                 }
                 15 => {
@@ -294,9 +294,9 @@ impl<'b, Ctx> Decode<'b, Ctx> for SuitCommandSequence<'b> {
     }
 }
 
-impl<'b, Ctx> minicbor::Decode<'b, Ctx> for CommandCustomValue {
+impl<'a, Ctx> minicbor::Decode<'a, Ctx> for CommandCustomValue {
     fn decode(
-        d: &mut minicbor::Decoder<'b>,
+        d: &mut minicbor::Decoder<'a>,
         _ctx: &mut Ctx,
     ) -> Result<Self, minicbor::decode::Error> {
         use minicbor::data;
@@ -343,8 +343,8 @@ impl<'b, Ctx> minicbor::Decode<'b, Ctx> for CommandCustomValue {
 }
 
 /// Helper : accept RFC4122 UUID (bstr len 16) or cbor-pen tag (#6.112 (bstr))
-pub fn decode_uuid_or_cborpen<'b, Ctx>(
-    d: &mut Decoder<'b>,
+pub fn decode_uuid_or_cborpen<'a, Ctx>(
+    d: &mut Decoder<'a>,
     _ctx: &mut Ctx,
 ) -> Result<Option<Vec<u8>>, DecodeError> {
     match d.datatype()? {
@@ -371,16 +371,16 @@ pub fn decode_uuid_or_cborpen<'b, Ctx>(
     }
 }
 
-impl<'b, Ctx> Decode<'b, Ctx> for SuitReportingBits {
-    fn decode(d: &mut Decoder<'b>, _: &mut Ctx) -> Result<Self, DecodeError> {
+impl<'a, Ctx> Decode<'a, Ctx> for SuitReportingBits {
+    fn decode(d: &mut Decoder<'a>, _: &mut Ctx) -> Result<Self, DecodeError> {
         let bits = d.u8()?;
         Ok(SuitReportingBits::from_bits_truncate(bits))
     }
 }
 
 // Only accept regex matching tags
-impl<'b, C> Decode<'b, C> for Tag38LTag {
-    fn decode(d: &mut Decoder<'b>, _: &mut C) -> Result<Self, DecodeError> {
+impl<'a, C> Decode<'a, C> for Tag38LTag {
+    fn decode(d: &mut Decoder<'a>, _: &mut C) -> Result<Self, DecodeError> {
         let tag = String::from_utf8_lossy(d.bytes()?);
         let re = Regex::new(r"^[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*$").unwrap();
         if re.is_match(&tag) {

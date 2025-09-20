@@ -17,24 +17,24 @@ type Rfc4122Uuid = ByteArray<16>;
 pub struct Debug<T>(pub T);
 
 #[derive(Encode, Debug)]
-pub enum SuitStart<'b> {
+pub enum SuitStart<'a> {
     #[n(0)]
-    EnvelopeTagged(#[n(0)] SuitEnvelope<'b>),
+    EnvelopeTagged(#[n(0)] SuitEnvelope<'a>),
     #[n(1)]
-    ManifestTagged(#[n(0)] SuitManifest<'b>),
+    ManifestTagged(#[n(0)] SuitManifest<'a>),
     #[n(2)]
     Start,
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
-pub struct SuitEnvelope<'b> {
+pub struct SuitEnvelope<'a> {
     #[b(2)] // we borrow a bstr so we need #[b()] instead of #[n()]
-    pub wrapper: LazyCbor<'b, SuitAuthentication<'b>>,
+    pub wrapper: LazyCbor<'a, SuitAuthentication<'a>>,
     #[b(3)]
-    manifest: LazyCbor<'b, SuitManifest<'b>>,
+    manifest: LazyCbor<'a, SuitManifest<'a>>,
     #[n(4)]
-    manifest_members: Option<Vec<SuitSeverableManifestMembers<'b>>>,
+    manifest_members: Option<Vec<SuitSeverableManifestMembers<'a>>>,
     #[n(5)]
     payload: Option<Vec<SuitPayload>>,
 }
@@ -49,11 +49,11 @@ struct SuitPayload {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(array)]
-pub struct SuitAuthentication<'b> {
+pub struct SuitAuthentication<'a> {
     #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
-    digest: LazyCbor<'b, SuitDigest>,
+    digest: LazyCbor<'a, SuitDigest>,
     #[b(1)]
-    authentications_keys: Option<LazyCbor<'b, SuitAuthenticationBlock>>, //TODO  zero or more
+    authentications_keys: Option<LazyCbor<'a, SuitAuthenticationBlock>>, //TODO  zero or more
 }
 
 #[derive(Debug, Encode)]
@@ -103,7 +103,7 @@ pub enum SuitAlgorithmId {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
-pub struct SuitManifest<'b> {
+pub struct SuitManifest<'a> {
     #[n(1)]
     version: u64, // must be 1
 
@@ -111,7 +111,7 @@ pub struct SuitManifest<'b> {
     sequence_number: u64,
 
     #[b(3)] // we borrow a bstr so we need #[b()] instead of #[n()]
-    common: LazyCbor<'b, SuitCommon<'b>>,
+    common: LazyCbor<'a, SuitCommon<'a>>,
 
     #[n(4)]
     reference_uri: Option<String>,
@@ -119,47 +119,47 @@ pub struct SuitManifest<'b> {
     // Unseverable members (top-level keys in manifest: 7,8,9)
     // SUIT_Unseverable_Members are not under a single key: they are individual optional keys.
     #[b(7)]
-    validate: Option<LazyCbor<'b, SuitCommandSequence<'b>>>, // ? suit-validate
+    validate: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-validate
 
     #[b(8)]
-    load: Option<LazyCbor<'b, SuitCommandSequence<'b>>>, // ? suit-load
+    load: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-load
 
     #[b(9)]
-    invoke: Option<LazyCbor<'b, SuitCommandSequence<'b>>>, // ? suit-invoke
+    invoke: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-invoke
 
     // Severable members choice (top-level keys: 16,20,23)
     // each may be a Digest or a bstr.cbor SUIT_Command_Sequence / SUIT_Text_Map
     #[b(16)]
-    payload_fetch: Option<DigestOrCbor<LazyCbor<'b, SuitCommandSequence<'b>>>>,
+    payload_fetch: Option<DigestOrCbor<LazyCbor<'a, SuitCommandSequence<'a>>>>,
 
     #[b(20)]
-    install: Option<DigestOrCbor<LazyCbor<'b, SuitCommandSequence<'b>>>>,
+    install: Option<DigestOrCbor<LazyCbor<'a, SuitCommandSequence<'a>>>>,
 
     #[b(23)]
-    text: Option<DigestOrCbor<LazyCbor<'b, SuitTextMap>>>,
+    text: Option<DigestOrCbor<LazyCbor<'a, SuitTextMap>>>,
     // Any future extensions will be ignored/omitted by derive (or add a catch-all decode if needed)
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
-pub struct SuitSeverableManifestMembers<'b> {
+pub struct SuitSeverableManifestMembers<'a> {
     #[b(16)]
-    payload_fetch: Option<LazyCbor<'b, SuitCommandSequence<'b>>>,
+    payload_fetch: Option<LazyCbor<'a, SuitCommandSequence<'a>>>,
 
     #[b(20)]
-    install: Option<LazyCbor<'b, SuitCommandSequence<'b>>>,
+    install: Option<LazyCbor<'a, SuitCommandSequence<'a>>>,
 
     #[b(23)]
-    text: Option<LazyCbor<'b, SuitTextMap>>,
+    text: Option<LazyCbor<'a, SuitTextMap>>,
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
-pub struct SuitIntegratedPayload<'b> {
+pub struct SuitIntegratedPayload<'a> {
     #[n(0)]
-    key: &'b ByteSlice,
+    key: &'a ByteSlice,
     #[n(1)]
-    value: &'b str,
+    value: &'a str,
 }
 
 #[derive(Debug, Encode)]
@@ -172,11 +172,11 @@ pub enum DigestOrCbor<T> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
-pub struct SuitCommon<'b> {
+pub struct SuitCommon<'a> {
     #[n(2)]
     components: SuitComponents, // TODO += at least 1
     #[b(4)] // we borrow bstr
-    shared_seq: Option<LazyCbor<'b, SuitSharedSequence<'b>>>,
+    shared_seq: Option<LazyCbor<'a, SuitSharedSequence<'a>>>,
 }
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
@@ -188,33 +188,33 @@ pub struct ComponentIdentifier(Vec<ByteVec>);
 
 #[derive(Debug, Encode)]
 #[cbor(transparent)]
-pub struct SuitSharedSequence<'b>(pub Vec<SharedSequenceItem<'b>>); // + = at least 1
+pub struct SuitSharedSequence<'a>(pub Vec<SharedSequenceItem<'a>>); // + = at least 1
 
 #[derive(Debug, Encode, Decode)]
-pub enum SharedSequenceItem<'b> {
+pub enum SharedSequenceItem<'a> {
     #[n(0)]
     Condition(#[n(0)] SuitCondition),
     #[n(1)]
     Command(
         #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
-        Box<SuitSharedCommand<'b>>,
+        Box<SuitSharedCommand<'a>>,
     ),
 }
 
 #[derive(Debug, Encode, Decode)]
-pub enum SuitSharedCommand<'b> {
+pub enum SuitSharedCommand<'a> {
     #[n(12)]
     SetComponentIndex(#[n(0)] IndexArg),
     #[b(32)]
     RunSequence(
         #[b(0)]
         // we borrow a bstr so we need #[b()] instead of #[n()]
-        LazyCbor<'b, SuitSharedSequence<'b>>,
+        LazyCbor<'a, SuitSharedSequence<'a>>,
     ),
     #[n(15)]
-    TryEach(#[n(0)] SuitDirectiveTryEachArgumentShared<'b>),
+    TryEach(#[n(0)] SuitDirectiveTryEachArgumentShared<'a>),
     #[n(20)]
-    OverrideParameters(#[n(0)] SuitParameters<'b>), // TODO should 1 +
+    OverrideParameters(#[n(0)] SuitParameters<'a>), // TODO should 1 +
 }
 
 #[derive(Debug, Encode)]
@@ -229,27 +229,27 @@ pub enum IndexArg {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitDirectiveTryEachArgumentShared<'b> {
+pub struct SuitDirectiveTryEachArgumentShared<'a> {
     #[cbor(borrow)]
-    sequences: Option<Vec<LazyCbor<'b, SuitSharedSequence<'b>>>>, // 2* bstr.cbor SUIT_Shared_Sequence
+    sequences: Option<Vec<LazyCbor<'a, SuitSharedSequence<'a>>>>, // 2* bstr.cbor SUIT_Shared_Sequence
 }
 
 #[derive(Debug, Encode)]
 #[cbor(transparent)]
 // Implement
-pub struct SuitCommandSequence<'b> {
-    pub item: Vec<SuitCommand<'b>>,
+pub struct SuitCommandSequence<'a> {
+    pub item: Vec<SuitCommand<'a>>,
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(array)]
-pub enum SuitCommand<'b> {
+pub enum SuitCommand<'a> {
     #[n(0)]
     Condition(#[n(0)] SuitCondition),
     #[n(1)]
     Directive(
         #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
-        SuitDirective<'b>,
+        SuitDirective<'a>,
     ),
     #[n(2)]
     Custom(#[n(0)] CommandCustomValue),
@@ -307,7 +307,7 @@ pub enum SuitCondition {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
-pub enum SuitDirective<'b> {
+pub enum SuitDirective<'a> {
     #[n(18)]
     Write(#[n(0)] SuitRepPolicy),
 
@@ -317,14 +317,14 @@ pub enum SuitDirective<'b> {
     #[n(32)]
     RunSequence(
         #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
-        LazyCbor<'b, SuitCommandSequence<'b>>,
+        LazyCbor<'a, SuitCommandSequence<'a>>,
     ),
 
     #[b(15)]
-    TryEach(#[n(0)] SuitDirectiveTryEachArgument<'b>),
+    TryEach(#[n(0)] SuitDirectiveTryEachArgument<'a>),
 
     #[b(20)]
-    OverrideParameters(#[n(0)] SuitParameters<'b>),
+    OverrideParameters(#[n(0)] SuitParameters<'a>),
 
     #[n(21)]
     Fetch(#[n(0)] SuitRepPolicy),
@@ -341,20 +341,20 @@ pub enum SuitDirective<'b> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitDirectiveTryEachArgument<'b>(
-    #[cbor(borrow)] Vec<LazyCbor<'b, SuitCommandSequence<'b>>>,
+pub struct SuitDirectiveTryEachArgument<'a>(
+    #[cbor(borrow)] Vec<LazyCbor<'a, SuitCommandSequence<'a>>>,
 );
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
-pub struct SuitParameters<'b> {
+pub struct SuitParameters<'a> {
     #[n(1)]
     #[cbor(decode_with = "crate::suit_decode::decode_uuid_or_cborpen")]
     vendor_identifier: Option<Vec<u8>>, // Rfc4122Uuid / cbor-pen
     #[n(2)]
     class_identifier: Option<Rfc4122Uuid>,
     #[b(3)] // We borrow the bstr
-    image_digest: Option<LazyCbor<'b, SuitDigest>>,
+    image_digest: Option<LazyCbor<'a, SuitDigest>>,
     #[n(5)]
     component_slot: Option<u64>,
     #[n(12)]
