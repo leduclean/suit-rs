@@ -19,9 +19,9 @@ pub struct Debug<T>(pub T);
 #[derive(Encode, Debug)]
 pub enum SuitStart<'a> {
     #[n(0)]
-    EnvelopeTagged(#[n(0)] SuitEnvelope<'a>),
+    EnvelopeTagged(#[n(0)] Box<SuitEnvelope<'a>>),
     #[n(1)]
-    ManifestTagged(#[n(0)] SuitManifest<'a>),
+    ManifestTagged(#[n(0)] Box<SuitManifest<'a>>),
     #[n(2)]
     Start,
 }
@@ -214,7 +214,7 @@ pub enum SuitSharedCommand<'a> {
     #[n(15)]
     TryEach(#[n(0)] SuitDirectiveTryEachArgumentShared<'a>),
     #[n(20)]
-    OverrideParameters(#[n(0)] SuitParameters<'a>), // TODO should 1 +
+    OverrideParameters(#[n(0)] Box<SuitParameters<'a>>), // TODO should 1 +
 }
 
 #[derive(Debug, Encode)]
@@ -324,7 +324,7 @@ pub enum SuitDirective<'a> {
     TryEach(#[n(0)] SuitDirectiveTryEachArgument<'a>),
 
     #[b(20)]
-    OverrideParameters(#[n(0)] SuitParameters<'a>),
+    OverrideParameters(#[n(0)] Box<SuitParameters<'a>>),
 
     #[n(21)]
     Fetch(#[n(0)] SuitRepPolicy),

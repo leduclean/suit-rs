@@ -22,12 +22,12 @@ where
 impl<'a> Decode<'a, ()> for SuitStart<'a> {
     fn decode(d: &mut Decoder<'a>, ctx: &mut ()) -> Result<Self, minicbor::decode::Error> {
         match d.tag()?.as_u64() {
-            107 => Ok(SuitStart::EnvelopeTagged(
+            107 => Ok(SuitStart::EnvelopeTagged(Box::new(
                 d.decode_with::<(), SuitEnvelope>(ctx)?,
-            )),
-            1070 => Ok(SuitStart::ManifestTagged(
+            ))),
+            1070 => Ok(SuitStart::ManifestTagged(Box::new(
                 d.decode_with::<(), SuitManifest>(ctx)?,
-            )),
+            ))),
             0 => Ok(SuitStart::Start),
             other => Err(minicbor::decode::Error::message(format!(
                 "unexpected tag {other}"
@@ -118,7 +118,7 @@ impl<'a, Ctx> Decode<'a, Ctx> for SuitSharedSequence<'a> {
                 20 => {
                     let params = SuitParameters::decode(dec, ctx)?;
                     items.push(SharedSequenceItem::Command(Box::new(
-                        SuitSharedCommand::OverrideParameters(params),
+                        SuitSharedCommand::OverrideParameters(Box::new(params)),
                     )));
                 }
 
@@ -256,7 +256,7 @@ impl<'a, Ctx> Decode<'a, Ctx> for SuitCommandSequence<'a> {
                 20 => {
                     let params = SuitParameters::decode(dec, ctx)?;
                     items.push(SuitCommand::Directive(SuitDirective::OverrideParameters(
-                        params,
+                        Box::new(params),
                     )));
                 }
                 21 => {
