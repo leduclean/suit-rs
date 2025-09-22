@@ -94,7 +94,7 @@ impl<'a, Ctx> Decode<'a, Ctx> for SuitSharedSequence<'a> {
         let mut items: Vec<SharedSequenceItem<'a>> = Vec::new();
 
         // handler closure called for each op; it must consume the argument.
-        decode_flat_pairs(d, ctx, |op, dec, ctx| {
+        decode_flat_pairs(d, |op, dec| {
             match op {
                 // Commands
                 12 => {
@@ -196,7 +196,7 @@ impl<'a, Ctx> minicbor::Decode<'a, Ctx> for IndexArg {
 impl<'a, Ctx> Decode<'a, Ctx> for SuitCommandSequence<'a> {
     fn decode(d: &mut Decoder<'a>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
         let mut items: Vec<SuitCommand> = Vec::new();
-        decode_flat_pairs(d, ctx, |op, dec, ctx| {
+        decode_flat_pairs(d, |op, dec| {
             match op {
                 // Conditions
                 1 => {
