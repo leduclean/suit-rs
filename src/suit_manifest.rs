@@ -74,26 +74,26 @@ pub struct SuitAuthentication<'a> {
     #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
     digest: LazyCbor<'a, SuitDigest<'a>>,
     #[b(1)]
-    authentications_keys: Option<LazyCbor<'a, SuitAuthenticationBlock>>, //TODO  zero or more
+    authentications_keys: Option<LazyCbor<'a, SuitAuthenticationBlock<'a>>>, //TODO  zero or more
 }
 
 #[derive(Debug, Encode)]
-pub enum SuitAuthenticationBlock {
+pub enum SuitAuthenticationBlock<'a> {
     /// COSE_Sign_Tagged (tag 98)
     #[n(0)]
-    Sign(#[n(0)] CoseSign),
+    Sign(#[n(0)] CoseSign<'a>),
 
     /// COSE_Sign1_Tagged (tag 18)
     #[n(1)]
-    Sign1(#[n(0)] CoseSign1),
+    Sign1(#[n(0)] CoseSign1<'a>),
 
     /// COSE_Mac_Tagged (tag 97)
     #[n(2)]
-    Mac(#[n(0)] CoseMac),
+    Mac(#[n(0)] CoseMac<'a>),
 
     /// COSE_Mac0_Tagged (tag 17)
     #[n(3)]
-    Mac0(#[n(0)] CoseMac0),
+    Mac0(#[n(0)] CoseMac0<'a>),
 }
 
 #[derive(Debug, Encode, Decode)]
