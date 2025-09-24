@@ -24,7 +24,7 @@ if ! command -v cargo-clippy >/dev/null 2>&1; then
     exit 1
 fi
 
-cargo test &&
+cargo test --locked --workspace  --all-targets --color=always &&
 cargo clippy --locked --workspace --all-features --all-targets -- -D clippy::all
 '"""
 
