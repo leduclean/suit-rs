@@ -1,7 +1,8 @@
 //! Helpers to decode "flat" op/arg sequences used by SUIT:
 //! - SUIT_Shared_Sequence (flat: [ op, arg, op, arg, ... ])
 //! - SUIT_Command_Sequence (flat: [ op, arg, op, arg, ... ])
-use minicbor::{Decoder, data::Type, decode::Error as DecodeError, display};
+use crate::suit_decode::type_to_str;
+use minicbor::{Decoder, data::Type, decode::Error as DecodeError};
 
 pub fn decode_flat_pairs<'b, F>(d: &mut Decoder<'b>, mut f: F) -> Result<(), DecodeError>
 where
@@ -11,11 +12,13 @@ where
     match d.datatype()? {
         Type::Array => {}
         other => {
-            return Err(DecodeError::message(format!(
-                "expected top-level array for flat op/arg sequence but got {} which is type: {}",
-                display(d.input()),
-                other
-            )));
+            defmt::error!(
+                "expected top-level array for flat op/arg sequencebut got {:?}",
+                type_to_str(other)
+            );
+            return Err(DecodeError::message(
+                "expected top-level array for flat op/arg sequence",
+            ));
         }
     }
     let arr_len = d.array()?; // consume array header
@@ -23,9 +26,10 @@ where
     if let Some(mut remaining) = arr_len {
         // definite-length array: must be an even number
         if remaining % 2 != 0 {
-            return Err(DecodeError::message(format!(
-                "flat op/arg array length must be even, got {remaining}"
-            )));
+            defmt::error!("flat op/arg array length must be even");
+            return Err(DecodeError::message(
+                "flat op/arg array length must be even",
+            ));
         }
 
         while remaining > 0 {
@@ -64,8 +68,9 @@ fn read_op_id<'b>(dec: &mut Decoder<'b>) -> Result<i64, DecodeError> {
             let i = dec.i64()?;
             Ok(i)
         }
-        other => Err(DecodeError::message(format!(
-            "expected integer op id but got {other:?}"
-        ))),
+        other => {
+            defmt::error!("expected integer op id but got {:?}", type_to_str(other));
+            Err(DecodeError::message("expected integer op id"))
+        }
     }
 }

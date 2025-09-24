@@ -11,3 +11,20 @@ impl<Ctx> Encode<Ctx> for SuitReportingBits {
         Ok(())
     }
 }
+
+impl<T, Ctx, const N: usize> Encode<Ctx> for CborVec<T, N>
+where
+    T: Encode<Ctx>,
+{
+    fn encode<W: minicbor::encode::Write>(
+        &self,
+        e: &mut Encoder<W>,
+        ctx: &mut Ctx,
+    ) -> Result<(), EncodeError<W::Error>> {
+        e.array(self.0.len() as u64)?;
+        for item in &self.0 {
+            item.encode(e, ctx)?;
+        }
+        Ok(())
+    }
+}
