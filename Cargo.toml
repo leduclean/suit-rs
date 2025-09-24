@@ -3,12 +3,19 @@ name = "suit-rs"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+# pure no_alloc
+default = []
+alloc = ["minicbor/alloc", "minicbor/half"]
+
 [dev-dependencies]
 rusty-hook = "^0.11.2"
 [dependencies]
-bitflags = { version = "2.9.4", features = ["serde"] }
-hex = "0.4.3"
-minicbor = { version = "2.1.1", features = ["full"] }
-once_cell = "1.21.3"
-regex = "1.11.2"
-serde = { version = "1.0.219", features = ["derive"] }
+bitflags = { version = "2.9.4", default-features = false, features = ["serde"] }
+defmt = "1.0.1"
+faster-hex = {version="0.10.0", default-features = false}
+heapless = { version = "0.8.0", default-features = false }
+minicbor = { version = "2.1.1", default-features = false, features = ["derive"] }
+once_cell = { version = "=1.19.0", default-features = false, features = [
+  "critical-section",
+] }
