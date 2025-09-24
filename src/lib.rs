@@ -1,3 +1,5 @@
+#![no_std]
+
 mod flat_ops;
 mod lazycbor;
 mod suit_cose;
