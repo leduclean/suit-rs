@@ -11,7 +11,7 @@ std = []
 host = ["std"]
 # Not yet implemented
 alloc = ["minicbor/alloc", "minicbor/half"]
-use-defmt = ["dep:defmt"]
+defmt = ["dep:defmt"]
 
 [dev-dependencies]
 rusty-hook = "^0.11.2"
