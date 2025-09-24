@@ -9,11 +9,15 @@ use minicbor::{
 type Rfc4122Uuid = ByteArray<16>;
 
 pub const SUIT_MAX_ARRAY_LENGTH: usize = 20;
+
+#[allow(dead_code)]
 const SUIT_MAX_KEY_NUM: usize = 6; // must be <=64
 
+#[allow(dead_code)]
 const SUIT_MAX_NAME_LENGTH: usize = 256; // the length of path or name such as component_identifier
 
-const SUIT_MAX_URI_LENGTH: usize = 256; // the length of uri to fetch something
+#[allow(dead_code)]
+const SUIT_MAX_URI_LENGTH: usize = 256; // the length of uri to fetch something (if we decide to turn to owned String)
 
 const SUIT_MAX_COMPONENT_NUM: usize = 3;
 
@@ -21,8 +25,10 @@ const SUIT_MAX_DEPENDENCY_NUM: usize = 1;
 
 const SUIT_MAX_INDEX_NUM: usize = SUIT_MAX_COMPONENT_NUM + SUIT_MAX_DEPENDENCY_NUM;
 
+#[allow(dead_code)]
 const SUIT_MAX_ARGS_LENGTH: usize = 64;
 
+#[allow(dead_code)]
 const SUIT_MAX_DATA_SIZE: usize = 8 * 1024 * 1024;
 
 // We overcharge the heapless Vec<T,N> to impl decode trait on it
