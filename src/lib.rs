@@ -1,4 +1,8 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+// modules
+#[macro_use]
+mod suit_debug_log;
 
 mod flat_ops;
 mod lazycbor;

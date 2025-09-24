@@ -12,7 +12,7 @@ where
     match d.datatype()? {
         Type::Array => {}
         other => {
-            defmt::error!(
+            error!(
                 "expected top-level array for flat op/arg sequencebut got {:?}",
                 type_to_str(other)
             );
@@ -26,7 +26,7 @@ where
     if let Some(mut remaining) = arr_len {
         // definite-length array: must be an even number
         if remaining % 2 != 0 {
-            defmt::error!("flat op/arg array length must be even");
+            error!("flat op/arg array length must be even");
             return Err(DecodeError::message(
                 "flat op/arg array length must be even",
             ));
@@ -69,7 +69,7 @@ fn read_op_id<'b>(dec: &mut Decoder<'b>) -> Result<i64, DecodeError> {
             Ok(i)
         }
         other => {
-            defmt::error!("expected integer op id but got {:?}", type_to_str(other));
+            error!("expected integer op id but got {:?}", type_to_str(other));
             Err(DecodeError::message("expected integer op id"))
         }
     }
