@@ -21,16 +21,16 @@ where
     T: Decode<'a, ()>,
 {
     fn decode(d: &mut Decoder<'a>, _: &mut Ctx) -> Result<Self, DecodeError> {
-        defmt::info!("Decoding struct: {}", core::any::type_name::<Self>());
-        defmt::info!("Decoding with debug...");
+        info!("Decoding struct: {}", core::any::type_name::<Self>());
+        info!("Decoding with debug...");
         let bytes = d.input();
-        defmt::info!("Shared sequence raw: {}", display(bytes));
+        info!("Shared sequence raw: {}", display(bytes));
         let inner = T::decode(d, &mut ())?;
         Ok(Debug(inner))
     }
 }
 
-// helper to log with defmt::info! the right Type encountered
+// helper to log with info! the right Type encountered
 pub fn type_to_str(t: Type) -> &'static str {
     match t {
         Type::U8 => "U8",
@@ -69,7 +69,7 @@ where
         for x in iter {
             let item = x?;
             v.push(item).map_err(|_item| {
-                defmt::error!("Too many items in a heapless Vec");
+                error!("Too many items in a heapless Vec");
                 DecodeError::message("Too many items in a Vec")
             })?;
         }
@@ -89,7 +89,7 @@ impl<'a> Decode<'a, ()> for SuitStart<'a> {
             )),
             0 => Ok(SuitStart::Start),
             other => {
-                defmt::error!("SuitStart: unexpected tag: {:?}", other);
+                error!("SuitStart: unexpected tag: {:?}", other);
                 Err(minicbor::decode::Error::message(
                     "unexpected tag for SuitStart",
                 ))
@@ -98,7 +98,7 @@ impl<'a> Decode<'a, ()> for SuitStart<'a> {
     }
 }
 
-impl<'a, Ctx> Decode<'a, Ctx> for SuitAuthenticationBlock {
+impl<'a, Ctx> Decode<'a, Ctx> for SuitAuthenticationBlock<'a> {
     fn decode(d: &mut Decoder<'a>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
         match d.tag()?.as_u64() {
             98 => Ok(SuitAuthenticationBlock::Sign(
@@ -115,7 +115,7 @@ impl<'a, Ctx> Decode<'a, Ctx> for SuitAuthenticationBlock {
             )),
 
             other => {
-                defmt::error!("SuitAuthenticationBlock: unexpected tag: {:?}", other);
+                error!("SuitAuthenticationBlock: unexpected tag: {:?}", other);
                 Err(minicbor::decode::Error::message(
                     "unexpected tag for SuitAuthenticationBlock",
                 ))
@@ -145,7 +145,7 @@ where
                 Ok(DigestOrCbor::Digest(digest))
             }
             other => {
-                defmt::error!(
+                error!(
                     "SuitAuthenticationBlock: unexpected type: {:?}",
                     type_to_str(other)
                 );
@@ -206,7 +206,7 @@ impl<'a, Ctx> Decode<'a, Ctx> for SuitSharedSequence<'a> {
                 }
 
                 other => {
-                    defmt::error!("unknow SharedSequence op id: {:?}", other);
+                    error!("unknow SharedSequence op id: {:?}", other);
                     return Err(minicbor::decode::Error::message(
                         "unknow SharedSequence op id",
                     ));
@@ -255,7 +255,7 @@ impl<'a, Ctx> minicbor::Decode<'a, Ctx> for IndexArg {
             }
 
             other => {
-                defmt::error!("IndexArg: unexpected type: {:?}", type_to_str(other));
+                error!("IndexArg: unexpected type: {:?}", type_to_str(other));
                 Err(minicbor::decode::Error::message(
                     "unexpected type for IndexArg",
                 ))
@@ -354,7 +354,7 @@ impl<'a, Ctx> Decode<'a, Ctx> for SuitCommandSequence<'a> {
                 }
 
                 other => {
-                    defmt::error!("unknow SuitCommandSequence op id: {:?}", other);
+                    error!("unknow SuitCommandSequence op id: {:?}", other);
                     return Err(minicbor::decode::Error::message(
                         "unknow SharedSequence op id",
                     ));
@@ -396,7 +396,7 @@ impl<'a, Ctx> minicbor::Decode<'a, Ctx> for CommandCustomValue<'a> {
             }
 
             other => {
-                defmt::error!(
+                error!(
                     "CommandCustomValue: unexpected type: {:?}",
                     type_to_str(other)
                 );
@@ -419,7 +419,7 @@ pub fn decode_uuid_or_cborpen<'a, Ctx>(
             if t.as_u64() == 112 {
                 let b = d.bytes()?;
                 if b.len() > 16 {
-                    defmt::error!("The UUID is too long (more than 16 bytes)");
+                    error!("The UUID is too long (more than 16 bytes)");
                     Err(minicbor::decode::Error::message(
                         "expected UUID or cbor-pen got other type",
                     ))
@@ -434,7 +434,7 @@ pub fn decode_uuid_or_cborpen<'a, Ctx>(
         }
         minicbor::data::Type::Bytes => Ok(Some(d.bytes().map(<&ByteSlice>::from)?)),
         other => {
-            defmt::error!("expected UUID or cbor-pen, got {:?}", type_to_str(other));
+            error!("expected UUID or cbor-pen, got {:?}", type_to_str(other));
             Err(minicbor::decode::Error::message(
                 "expected UUID or cbor-pen got other type",
             ))
@@ -455,7 +455,7 @@ impl<'a, C> Decode<'a, C> for Tag38LTag<'a> {
         let tag_bytes = d.bytes()?;
         if is_valid_tag38ltag(tag_bytes) {
             Ok(Tag38LTag(str::from_utf8(&tag_bytes).map_err(|e| {
-                defmt::error!("Utf8 error for tag38ltag at: {:?}", e.valid_up_to());
+                error!("Utf8 error for tag38ltag at: {:?}", e.valid_up_to());
                 DecodeError::message("Utf8 parsing error for Tag38LTag")
             })?))
         } else {
