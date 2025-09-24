@@ -6,15 +6,20 @@ edition = "2024"
 [features]
 # pure no_alloc
 default = []
+# required for host building
+std = []
+host = ["std"]
+# Not yet implemented
 alloc = ["minicbor/alloc", "minicbor/half"]
+use-defmt = ["dep:defmt"]
 
 [dev-dependencies]
 rusty-hook = "^0.11.2"
 [dependencies]
 bitflags = { version = "2.9.4", default-features = false, features = ["serde"] }
-defmt = "1.0.1"
-faster-hex = {version="0.10.0", default-features = false}
+defmt = { version = "1.0.1", optional = true }
 heapless = { version = "0.8.0", default-features = false }
+hex = "0.4.3"
 minicbor = { version = "2.1.1", default-features = false, features = ["derive"] }
 once_cell = { version = "=1.19.0", default-features = false, features = [
   "critical-section",
