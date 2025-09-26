@@ -60,28 +60,28 @@ pub struct SuitEnvelope<'a> {
     #[b(2)] // we borrow a bstr so we need #[b()] instead of #[n()]
     pub wrapper: LazyCbor<'a, SuitAuthentication<'a>>,
     #[b(3)]
-    manifest: LazyCbor<'a, SuitManifest<'a>>,
+    pub manifest: LazyCbor<'a, SuitManifest<'a>>,
     #[n(4)]
     manifest_members: Option<CborVec<SuitSeverableManifestMembers<'a>, SUIT_MAX_ARRAY_LENGTH>>,
     #[n(5)]
-    payload: Option<CborVec<SuitPayload<'a>, SUIT_MAX_ARRAY_LENGTH>>,
+    pub payload: Option<CborVec<SuitPayload<'a>, SUIT_MAX_ARRAY_LENGTH>>,
 }
 
 #[derive(Debug, Encode, Decode)]
-struct SuitPayload<'a> {
+pub struct SuitPayload<'a> {
     #[n(0)]
-    key: &'a str,
+    pub key: &'a str,
     #[n(1)]
-    value: &'a ByteSlice,
+    pub value: &'a ByteSlice,
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(array)]
 pub struct SuitAuthentication<'a> {
     #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
-    digest: LazyCbor<'a, SuitDigest<'a>>,
+    pub digest: LazyCbor<'a, SuitDigest<'a>>,
     #[b(1)]
-    authentications_keys: Option<LazyCbor<'a, SuitAuthenticationBlock<'a>>>, //TODO  zero or more
+    pub authentications_keys: Option<LazyCbor<'a, SuitAuthenticationBlock<'a>>>, //TODO  zero or more
 }
 
 #[derive(Debug, Encode)]
@@ -107,9 +107,9 @@ pub enum SuitAuthenticationBlock<'a> {
 #[cbor(array)]
 pub struct SuitDigest<'a> {
     #[n(0)]
-    algorithm_id: SuitAlgorithmId,
+    pub algorithm_id: SuitAlgorithmId,
     #[n(1)]
-    bytes: &'a ByteSlice,
+    pub bytes: &'a ByteSlice,
 }
 #[derive(Debug, Encode, Decode)]
 #[cbor(index_only)]
@@ -132,38 +132,38 @@ pub enum SuitAlgorithmId {
 #[cbor(map)]
 pub struct SuitManifest<'a> {
     #[n(1)]
-    version: u64, // must be 1
+    pub version: u64, // must be 1
 
     #[n(2)]
-    sequence_number: u64,
+    pub sequence_number: u64,
 
     #[b(3)] // we borrow a bstr so we need #[b()] instead of #[n()]
-    common: LazyCbor<'a, SuitCommon<'a>>,
+    pub common: LazyCbor<'a, SuitCommon<'a>>,
 
     #[n(4)]
-    reference_uri: Option<&'a str>,
+    pub reference_uri: Option<&'a str>,
 
     // Unseverable members (top-level keys in manifest: 7,8,9)
     // SUIT_Unseverable_Members are not under a single key: they are individual optional keys.
     #[b(7)]
-    validate: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-validate
+    pub validate: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-validate
 
     #[b(8)]
-    load: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-load
+    pub load: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-load
 
     #[b(9)]
-    invoke: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-invoke
+    pub invoke: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-invoke
 
     // Severable members choice (top-level keys: 16,20,23)
     // each may be a Digest or a bstr.cbor SUIT_Command_Sequence / SUIT_Text_Map
     #[b(16)]
-    payload_fetch: Option<DigestOrCbor<'a, LazyCbor<'a, SuitCommandSequence<'a>>>>,
+    pub payload_fetch: Option<DigestOrCbor<'a, LazyCbor<'a, SuitCommandSequence<'a>>>>,
 
     #[b(20)]
-    install: Option<DigestOrCbor<'a, LazyCbor<'a, SuitCommandSequence<'a>>>>,
+    pub install: Option<DigestOrCbor<'a, LazyCbor<'a, SuitCommandSequence<'a>>>>,
 
     #[b(23)]
-    text: Option<DigestOrCbor<'a, LazyCbor<'a, SuitTextMap<'a>>>>,
+    pub text: Option<DigestOrCbor<'a, LazyCbor<'a, SuitTextMap<'a>>>>,
     // Any future extensions will be ignored/omitted by derive (or add a catch-all decode if needed)
 }
 
@@ -171,22 +171,22 @@ pub struct SuitManifest<'a> {
 #[cbor(map)]
 pub struct SuitSeverableManifestMembers<'a> {
     #[b(16)]
-    payload_fetch: Option<LazyCbor<'a, SuitCommandSequence<'a>>>,
+    pub payload_fetch: Option<LazyCbor<'a, SuitCommandSequence<'a>>>,
 
     #[b(20)]
-    install: Option<LazyCbor<'a, SuitCommandSequence<'a>>>,
+    pub install: Option<LazyCbor<'a, SuitCommandSequence<'a>>>,
 
     #[b(23)]
-    text: Option<LazyCbor<'a, SuitTextMap<'a>>>,
+    pub text: Option<LazyCbor<'a, SuitTextMap<'a>>>,
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
 pub struct SuitIntegratedPayload<'a> {
     #[n(0)]
-    key: &'a ByteSlice,
+    pub key: &'a ByteSlice,
     #[n(1)]
-    value: &'a str,
+    pub value: &'a str,
 }
 
 #[derive(Debug, Encode)]
@@ -201,13 +201,15 @@ pub enum DigestOrCbor<'a, T: 'a> {
 #[cbor(map)]
 pub struct SuitCommon<'a> {
     #[n(2)]
-    components: SuitComponents<'a>, // TODO += at least 1
+    pub components: SuitComponents<'a>, // TODO += at least 1
     #[b(4)] // we borrow bstr
-    shared_seq: Option<LazyCbor<'a, SuitSharedSequence<'a>>>,
+    pub shared_seq: Option<LazyCbor<'a, SuitSharedSequence<'a>>>,
 }
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitComponents<'a>(#[cbor(borrow)] CborVec<ComponentIdentifier<'a>, SUIT_MAX_INDEX_NUM>); // += at least 1
+pub struct SuitComponents<'a>(
+    #[cbor(borrow)] pub CborVec<ComponentIdentifier<'a>, SUIT_MAX_INDEX_NUM>,
+); // += at least 1
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
@@ -260,7 +262,7 @@ pub enum IndexArg {
 #[cbor(transparent)]
 pub struct SuitDirectiveTryEachArgumentShared<'a> {
     #[cbor(borrow)]
-    sequences: Option<CborVec<LazyCbor<'a, SuitSharedSequence<'a>>, SUIT_MAX_ARRAY_LENGTH>>, // 2* bstr.cbor SUIT_Shared_Sequence
+    pub sequences: Option<CborVec<LazyCbor<'a, SuitSharedSequence<'a>>, SUIT_MAX_ARRAY_LENGTH>>, // 2* bstr.cbor SUIT_Shared_Sequence
 }
 
 #[derive(Debug, Encode)]
@@ -371,7 +373,7 @@ pub enum SuitDirective<'a> {
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitDirectiveTryEachArgument<'a>(
-    #[cbor(borrow)] CborVec<LazyCbor<'a, SuitCommandSequence<'a>>, SUIT_MAX_ARRAY_LENGTH>,
+    #[cbor(borrow)] pub CborVec<LazyCbor<'a, SuitCommandSequence<'a>>, SUIT_MAX_ARRAY_LENGTH>,
 );
 
 #[derive(Debug, Encode, Decode)]
@@ -379,31 +381,31 @@ pub struct SuitDirectiveTryEachArgument<'a>(
 pub struct SuitParameters<'a> {
     #[n(1)]
     #[cbor(decode_with = "crate::suit_decode::decode_uuid_or_cborpen")]
-    vendor_identifier: Option<&'a ByteSlice>, // Rfc4122Uuid / cbor-pen
+    pub vendor_identifier: Option<&'a ByteSlice>, // Rfc4122Uuid / cbor-pen
     #[n(2)]
-    class_identifier: Option<Rfc4122Uuid>,
+    pub class_identifier: Option<Rfc4122Uuid>,
     #[b(3)] // We borrow the bstr
-    image_digest: Option<LazyCbor<'a, SuitDigest<'a>>>,
+    pub image_digest: Option<LazyCbor<'a, SuitDigest<'a>>>,
     #[n(5)]
-    component_slot: Option<u64>,
+    pub component_slot: Option<u64>,
     #[n(12)]
-    strict_order: Option<bool>,
+    pub strict_order: Option<bool>,
     #[n(13)]
-    soft_failure: Option<bool>,
+    pub soft_failure: Option<bool>,
     #[n(14)]
-    image_size: Option<u64>,
+    pub image_size: Option<u64>,
     #[n(18)]
-    content: Option<&'a ByteSlice>,
+    pub content: Option<&'a ByteSlice>,
     #[n(21)]
-    uri: Option<&'a str>,
+    pub uri: Option<&'a str>,
     #[n(22)]
-    source_component: Option<u64>,
+    pub source_component: Option<u64>,
     #[n(23)]
-    invoke_args: Option<&'a ByteSlice>,
+    pub invoke_args: Option<&'a ByteSlice>,
     #[n(24)]
-    device_identifier: Option<Rfc4122Uuid>,
+    pub device_identifier: Option<Rfc4122Uuid>,
     #[n(25)]
-    fetch_args: Option<&'a ByteSlice>,
+    pub fetch_args: Option<&'a ByteSlice>,
     // custom: Option<CustomParameterValue,
 }
 
@@ -427,54 +429,54 @@ pub struct Tag38LTag<'a>(pub &'a str);
 #[cbor(transparent)]
 pub struct SuitTextMap<'a> {
     #[cbor(borrow)]
-    entries: CborVec<(Tag38LTag<'a>, SuitTextLMap<'a>), SUIT_MAX_ARRAY_LENGTH>,
+    pub entries: CborVec<(Tag38LTag<'a>, SuitTextLMap<'a>), SUIT_MAX_ARRAY_LENGTH>,
 }
 
 #[derive(Debug, Encode, Decode)]
-struct SuitTextLMap<'a> {
+pub struct SuitTextLMap<'a> {
     #[b(0)]
-    text_keys: SuitTextKeys<'a>,
+    pub text_keys: SuitTextKeys<'a>,
     #[b(1)]
-    components: CborVec<SuitTextComponentPair<'a>, SUIT_MAX_ARRAY_LENGTH>,
+    pub components: CborVec<SuitTextComponentPair<'a>, SUIT_MAX_ARRAY_LENGTH>,
 }
 #[derive(Debug, Encode, Decode)]
-struct SuitTextComponentPair<'a> {
+pub struct SuitTextComponentPair<'a> {
     #[b(0)]
-    key: SuitComponentIdentifier<'a>,
+    pub key: SuitComponentIdentifier<'a>,
     #[b(1)]
-    text_component: SuitTextComponentKeys<'a>,
+    pub text_component: SuitTextComponentKeys<'a>,
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
-struct SuitTextComponentKeys<'a> {
+pub struct SuitTextComponentKeys<'a> {
     #[n(1)]
-    vendor_name: Option<&'a str>,
+    pub vendor_name: Option<&'a str>,
     #[n(2)]
-    model_name: Option<&'a str>,
+    pub model_name: Option<&'a str>,
     #[n(3)]
-    vendor_domain: Option<&'a str>,
+    pub vendor_domain: Option<&'a str>,
     #[n(4)]
-    model_info: Option<&'a str>,
+    pub model_info: Option<&'a str>,
     #[n(5)]
-    component_descripiton: Option<&'a str>,
+    pub component_description: Option<&'a str>,
     #[n(6)]
-    component_version: Option<&'a str>,
+    pub component_version: Option<&'a str>,
 }
 
 #[derive(Debug, Encode, Decode, Hash, Eq, PartialEq)]
 #[cbor(transparent)]
-pub struct SuitComponentIdentifier<'a>(&'a str);
+pub struct SuitComponentIdentifier<'a>(pub &'a str);
 
 #[derive(Debug, Decode, Encode)]
 #[cbor(map)]
-struct SuitTextKeys<'a> {
+pub struct SuitTextKeys<'a> {
     #[n(1)]
-    description: Option<&'a str>,
+    pub description: Option<&'a str>,
     #[n(2)]
-    update_description: Option<&'a str>,
+    pub update_description: Option<&'a str>,
     #[n(3)]
-    manifest_json_source: Option<&'a str>,
+    pub manifest_json_source: Option<&'a str>,
     #[n(4)]
-    manifest_yaml_source: Option<&'a str>,
+    pub manifest_yaml_source: Option<&'a str>,
 }
