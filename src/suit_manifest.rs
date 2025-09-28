@@ -4,6 +4,7 @@ use heapless::Vec;
 use minicbor::{
     Decode, Encode,
     bytes::{ByteArray, ByteSlice},
+    decode::Error as DecodeError,
 };
 
 type Rfc4122Uuid = ByteArray<16>;
@@ -215,20 +216,19 @@ pub struct SuitComponents<'a>(
 #[cbor(transparent)]
 pub struct ComponentIdentifier<'a>(#[cbor(borrow)] pub CborVec<&'a ByteSlice, SUIT_MAX_INDEX_NUM>);
 
-#[derive(Debug, Encode)]
-#[cbor(transparent)]
-pub struct SuitSharedSequence<'a>(pub CborVec<SharedSequenceItem<'a>, SUIT_MAX_ARRAY_LENGTH>); // + = at least 1
-
 #[derive(Debug, Encode, Decode)]
-#[allow(clippy::large_enum_variant)]
-pub enum SharedSequenceItem<'a> {
-    #[n(0)]
-    Condition(#[n(0)] SuitCondition),
-    #[n(1)]
-    Command(
-        #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
-        SuitSharedCommand<'a>,
-    ),
+#[cbor(transparent)]
+pub struct SuitSharedSequence<'a>(#[cbor(borrow)] pub(crate) &'a ByteSlice); // + = at least 1
+
+pub trait SuitSharedSequenceHandler<'a> {
+    fn on_conditions(
+        &mut self,
+        conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
+    ) -> Result<(), DecodeError>;
+    fn on_commands(
+        &mut self,
+        commands: Vec<SuitSharedCommand<'a>, SUIT_MAX_ARRAY_LENGTH>,
+    ) -> Result<(), DecodeError>;
 }
 
 #[derive(Debug, Encode, Decode)]
