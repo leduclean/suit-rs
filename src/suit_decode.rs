@@ -163,69 +163,6 @@ where
         }
     }
 }
-// We implement this to decode because the shared sequence is flat encoded
-// it means [key, value, key, value] instead of [[key,value],[key, value]]
-impl<'a, Ctx> Decode<'a, Ctx> for SuitSharedSequence<'a> {
-    fn decode(d: &mut Decoder<'a>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
-        let mut items: Vec<SharedSequenceItem<'a>, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
-
-        // handler closure called for each op; it must consume the argument.
-        decode_flat_pairs(d, |op, dec| {
-            match op {
-                // Commands
-                12 => {
-                    let idx = IndexArg::decode(dec, _ctx)?;
-                    let _ = items.push(SharedSequenceItem::Command(
-                        SuitSharedCommand::SetComponentIndex(idx),
-                    ));
-                }
-                32 => {
-                    let seq = LazyCbor::<SuitSharedSequence>::decode(dec, _ctx)?;
-                    let _ = items.push(SharedSequenceItem::Command(
-                        SuitSharedCommand::RunSequence(seq),
-                    ));
-                }
-                15 => {
-                    let arg = SuitDirectiveTryEachArgumentShared::decode(dec, _ctx)?;
-                    let _ =
-                        items.push(SharedSequenceItem::Command(SuitSharedCommand::TryEach(arg)));
-                }
-                20 => {
-                    let params = SuitParameters::decode(dec, _ctx)?;
-                    let _ = items.push(SharedSequenceItem::Command(
-                        SuitSharedCommand::OverrideParameters(params),
-                    ));
-                }
-
-                // Conditions (all consume SuitRepPolicy)
-                1 | 2 | 3 | 5 | 6 | 14 | 24 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let cond = match op {
-                        1 => SuitCondition::VendorIdentifier(policy),
-                        2 => SuitCondition::ClassIdentifier(policy),
-                        3 => SuitCondition::ImageMatch(policy),
-                        5 => SuitCondition::ComponentSlot(policy),
-                        6 => SuitCondition::CheckContent(policy),
-                        14 => SuitCondition::Abort(policy),
-                        24 => SuitCondition::DeviceIdentifier(policy),
-                        _ => unreachable!(),
-                    };
-                    let _ = items.push(SharedSequenceItem::Condition(cond));
-                }
-
-                _ => {
-                    #[cfg(any(feature = "defmt", feature = "std"))]
-                    error!("unknow SharedSequence op id: {:?}", op);
-                    return Err(minicbor::decode::Error::message(
-                        "unknow SharedSequence op id",
-                    ));
-                }
-            }
-            Ok(())
-        })?;
-        Ok(SuitSharedSequence(CborVec(items)))
-    }
-}
 
 impl<'a, Ctx> minicbor::Decode<'a, Ctx> for IndexArg {
     fn decode(
@@ -511,4 +448,139 @@ fn is_valid_tag38ltag(bytes: &[u8]) -> bool {
     }
 
     true
+}
+
+impl<'a> SuitSharedSequence<'a> {
+    fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), DecodeError>
+    where
+        H: SuitSharedSequenceHandler<'a>,
+    {
+        let _ctx = &mut ();
+        let mut commands: Vec<SuitSharedCommand<'a>, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
+        let mut conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
+
+        // on match ici sur le tag qui nous permet d'identifier la variante mais ca serait la meme chose avec des champs à type multiple.
+        let mut d = Decoder::new(self.0);
+        decode_flat_pairs(&mut d, |op, dec| {
+            match op {
+                // Commands
+                12 => {
+                    let idx = IndexArg::decode(dec, _ctx)?;
+                    let _ = commands.push(SuitSharedCommand::SetComponentIndex(idx));
+                }
+                32 => {
+                    let seq = LazyCbor::<SuitSharedSequence>::decode(dec, _ctx)?;
+                    let _ = commands.push(SuitSharedCommand::RunSequence(seq));
+                }
+                15 => {
+                    let arg = SuitDirectiveTryEachArgumentShared::decode(dec, _ctx)?;
+                    let _ = commands.push(SuitSharedCommand::TryEach(arg));
+                }
+                20 => {
+                    let params = SuitParameters::decode(dec, _ctx)?;
+                    let _ = commands.push(SuitSharedCommand::OverrideParameters(params));
+                }
+
+                // Conditions (all consume SuitRepPolicy)
+                1 | 2 | 3 | 5 | 6 | 14 | 24 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let cond = match op {
+                        1 => SuitCondition::VendorIdentifier(policy),
+                        2 => SuitCondition::ClassIdentifier(policy),
+                        3 => SuitCondition::ImageMatch(policy),
+                        5 => SuitCondition::ComponentSlot(policy),
+                        6 => SuitCondition::CheckContent(policy),
+                        14 => SuitCondition::Abort(policy),
+                        24 => SuitCondition::DeviceIdentifier(policy),
+                        _ => unreachable!(),
+                    };
+                    let _ = conditions.push(cond);
+                }
+
+                _ => {
+                    #[cfg(any(feature = "defmt", feature = "std"))]
+                    error!("unknow SharedSequence op id: {:?}", op);
+                    return Err(minicbor::decode::Error::message(
+                        "unknow SharedSequence op id",
+                    ));
+                }
+            }
+
+            Ok(())
+        })?;
+
+        if !conditions.is_empty() {
+            handler.on_conditions(conditions)?;
+        }
+        if !commands.is_empty() {
+            handler.on_commands(commands)?;
+        }
+        Ok(())
+    }
+}
+
+mod tests {
+    use super::*;
+    struct TestHandler;
+    impl<'a> SuitSharedSequenceHandler<'a> for TestHandler {
+        fn on_conditions(
+            &mut self,
+            conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
+        ) -> Result<(), DecodeError> {
+            for cond in conditions {
+                assert!(matches!(
+                    cond,
+                    SuitCondition::VendorIdentifier(_)
+                        | SuitCondition::ClassIdentifier(_)
+                        | SuitCondition::ImageMatch(_)
+                        | SuitCondition::ComponentSlot(_)
+                        | SuitCondition::CheckContent(_)
+                        | SuitCondition::Abort(_)
+                        | SuitCondition::DeviceIdentifier(_)
+                ));
+            }
+            Ok(())
+        }
+
+        fn on_commands(
+            &mut self,
+            commands: Vec<SuitSharedCommand<'a>, SUIT_MAX_ARRAY_LENGTH>,
+        ) -> Result<(), DecodeError> {
+            for cmd in commands {
+                assert!(matches!(
+                    cmd,
+                    SuitSharedCommand::SetComponentIndex(_)
+                        | SuitSharedCommand::RunSequence(_)
+                        | SuitSharedCommand::TryEach(_)
+                        | SuitSharedCommand::OverrideParameters(_)
+                ));
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_suit_shared_sequence_decode() {
+        // Minimal flat shared sequence: 1 command + 1 condition
+        const SUIT_SHARED_SEQUENCE_MINIMAL: &[u8] = &[
+            0x84, // CBOR array of 4 elements → 2 pairs (op, arg)
+            // -----------------------
+            // COMMAND: directive-override-parameters (op = 20)
+            0x14, // op 20
+            0xA1, // map(1) → argument map for SuitParameters
+            0x01, // key n(1) = vendor_identifier
+            0x50, // bstr(16) → minimal vendor UUID
+            0xFA, 0x6B, 0x4A, 0x53, 0xD5, 0xAD, 0x5F, 0xDF, 0xBE, 0x9D, 0xE6, 0x63, 0xE4, 0xD4,
+            0x1F, 0xFE,
+            // -----------------------
+            // CONDITION: condition-vendor-identifier (op = 1)
+            0x01, // op 1
+            0x0F, // arg 15
+        ];
+
+        let seq = SuitSharedSequence(SUIT_SHARED_SEQUENCE_MINIMAL.into());
+        let mut handler = TestHandler;
+        seq.decode_and_dispatch(&mut handler).unwrap();
+        assert!(seq.decode_and_dispatch(&mut handler).is_ok());
+    }
 }
