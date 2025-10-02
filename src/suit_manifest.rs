@@ -44,6 +44,7 @@ pub struct CborVec<T, const N: usize>(pub Vec<T, N>);
 pub struct Debug<T>(pub T);
 
 #[derive(Encode, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum SuitStart<'a> {
     #[n(0)]
     EnvelopeTagged(#[n(0)] SuitEnvelope<'a>),
@@ -217,6 +218,7 @@ pub struct ComponentIdentifier<'a>(#[cbor(borrow)] pub CborVec<&'a ByteSlice, SU
 pub struct SuitSharedSequence<'a>(pub CborVec<SharedSequenceItem<'a>, SUIT_MAX_ARRAY_LENGTH>); // + = at least 1
 
 #[derive(Debug, Encode, Decode)]
+#[allow(clippy::large_enum_variant)]
 pub enum SharedSequenceItem<'a> {
     #[n(0)]
     Condition(#[n(0)] SuitCondition),
@@ -244,6 +246,7 @@ pub enum SuitSharedCommand<'a> {
 }
 
 #[derive(Debug, Encode)]
+#[allow(variant_size_differences)]
 pub enum IndexArg {
     #[n(0)]
     Single(#[n(0)] u64), // uint
@@ -268,6 +271,7 @@ pub struct SuitCommandSequence<'a> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(array)]
+#[allow(clippy::large_enum_variant)]
 pub enum SuitCommand<'a> {
     #[n(0)]
     Condition(#[n(0)] SuitCondition),

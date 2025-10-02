@@ -1,4 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+// We declare as error those lint warnings
+#![deny(variant_size_differences)]
+#![deny(clippy::large_enum_variant)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
