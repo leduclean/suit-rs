@@ -16,23 +16,22 @@ mod suit_decode;
 mod suit_encode;
 pub mod suit_manifest;
 
-use minicbor::{Decode, Decoder, decode::Error as DecodeError};
-use suit_manifest::SuitStart;
-/// Decode a SUIT manifest from a byte slice.
-///
-/// This function takes a byte slice containing the raw SUIT manifest data
-/// and attempts to decode it into a `SuitStart` structure using `minicbor`.
+use minicbor::decode::Error as DecodeError;
+/// Decode a SUIT manifest from raw bytes into a handler.
 ///
 /// # Arguments
 ///
-/// * `data` - A byte slice (`&[u8]`) containing the encoded SUIT manifest.
+/// * `data` - Raw bytes containing the encoded SUIT manifest
+/// * `handler` - Handler that will process the decoded manifest components
 ///
 /// # Returns
 ///
-/// * `Ok(SuitStart)` if decoding is successful.
-/// * `Err(DecodeError)` if the data could not be decoded.
+/// * `Ok(())` on success
+/// * `Err(DecodeError)` if decoding fails
 ///
-pub fn suit_decode(data: &[u8]) -> Result<SuitStart<'_>, DecodeError> {
-    let mut d = Decoder::new(data);
-    SuitStart::decode(&mut d, &mut ())
+pub fn suit_decode<'a, H>(data: &'a [u8], handler: &mut H) -> Result<(), DecodeError>
+where
+    H: suit_manifest::SuitStartHandler<'a>,
+{
+    suit_decode::decode_and_dispatch(data, handler)
 }

@@ -79,28 +79,6 @@ where
     }
 }
 
-impl<'a> Decode<'a, ()> for SuitStart<'a> {
-    fn decode(d: &mut Decoder<'a>, _ctx: &mut ()) -> Result<Self, DecodeError> {
-        let tag = d.tag()?.as_u64();
-        match tag {
-            107 => Ok(SuitStart::EnvelopeTagged(
-                d.decode_with::<(), SuitEnvelope>(_ctx)?,
-            )),
-            1070 => Ok(SuitStart::ManifestTagged(
-                d.decode_with::<(), SuitManifest>(_ctx)?,
-            )),
-            0 => Ok(SuitStart::Start),
-            _ => {
-                #[cfg(any(feature = "defmt", feature = "std"))]
-                error!("SuitStart: unexpected tag: {:?}", tag);
-                Err(minicbor::decode::Error::message(
-                    "unexpected tag for SuitStart",
-                ))
-            }
-        }
-    }
-}
-
 impl<'a, Ctx> Decode<'a, Ctx> for SuitAuthenticationBlock<'a> {
     fn decode(d: &mut Decoder<'a>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
         let tag = d.tag()?.as_u64();
@@ -523,6 +501,32 @@ impl<'a> SuitCommandSequence<'a> {
             handler.on_customs(customs)?;
         }
         Ok(())
+    }
+}
+
+/// Starting entry point to decode a SUIT structure and dispatch the decoded items to the handler.
+pub(crate) fn decode_and_dispatch<'a, H>(buf: &'a [u8], handler: &mut H) -> Result<(), DecodeError>
+where
+    H: SuitStartHandler<'a>,
+{
+    // on match ici sur le tag qui nous permet d'identifier la variante mais ca serait la meme chose avec des champs à type multiple.
+    let mut d = Decoder::new(buf);
+    let tag = d.tag()?.as_u64();
+    let ctx = &mut ();
+    match tag {
+        107 => {
+            let envelope = d.decode_with(ctx)?;
+            handler.on_envelope(envelope)
+        }
+        1070 => {
+            let manifest = d.decode_with(ctx)?;
+            handler.on_manifest(manifest)
+        }
+        _ => {
+            #[cfg(any(feature = "defmt", feature = "std"))]
+            error!("SuitStart: unexpected tag: {:?}", tag);
+            Err(DecodeError::unknown_variant(tag as i64))
+        }
     }
 }
 
