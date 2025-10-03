@@ -250,7 +250,7 @@ pub fn decode_uuid_or_cborpen<'a, Ctx>(
                         "expected UUID or cbor-pen got other type",
                     ))
                 } else {
-                    Ok(Some(d.bytes().map(<&ByteSlice>::from)?))
+                    Ok(Some(<&ByteSlice>::from(b)))
                 }
             } else {
                 Err(minicbor::decode::Error::message(
