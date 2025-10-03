@@ -43,16 +43,9 @@ pub struct CborVec<T, const N: usize>(pub Vec<T, N>);
 #[derive(Encode, Debug)]
 #[cbor(transparent)]
 pub struct Debug<T>(pub T);
-
-#[derive(Encode, Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum SuitStart<'a> {
-    #[n(0)]
-    EnvelopeTagged(#[n(0)] SuitEnvelope<'a>),
-    #[n(1)]
-    ManifestTagged(#[n(0)] SuitManifest<'a>),
-    #[n(2)]
-    Start,
+pub trait SuitStartHandler<'a> {
+    fn on_envelope(&mut self, envelope: SuitEnvelope<'a>) -> Result<(), DecodeError>;
+    fn on_manifest(&mut self, manifest: SuitManifest<'a>) -> Result<(), DecodeError>;
 }
 
 #[derive(Debug, Encode, Decode)]
