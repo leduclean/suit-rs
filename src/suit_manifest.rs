@@ -265,25 +265,26 @@ pub struct SuitDirectiveTryEachArgumentShared<'a> {
     pub sequences: Option<CborVec<LazyCbor<'a, SuitSharedSequence<'a>>, SUIT_MAX_ARRAY_LENGTH>>, // 2* bstr.cbor SUIT_Shared_Sequence
 }
 
-#[derive(Debug, Encode)]
+#[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitCommandSequence<'a> {
-    pub item: CborVec<SuitCommand<'a>, SUIT_MAX_ARRAY_LENGTH>,
+    #[cbor(borrow)]
+    pub item: &'a ByteSlice,
 }
 
-#[derive(Debug, Encode, Decode)]
-#[cbor(array)]
-#[allow(clippy::large_enum_variant)]
-pub enum SuitCommand<'a> {
-    #[n(0)]
-    Condition(#[n(0)] SuitCondition),
-    #[n(1)]
-    Directive(
-        #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
-        SuitDirective<'a>,
-    ),
-    #[n(2)]
-    Custom(#[n(0)] CommandCustomValue<'a>),
+pub trait SuitCommandHandler<'a> {
+    fn on_conditions(
+        &mut self,
+        conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
+    ) -> Result<(), DecodeError>;
+    fn on_directives(
+        &mut self,
+        directives: Vec<SuitDirective<'a>, SUIT_MAX_ARRAY_LENGTH>,
+    ) -> Result<(), DecodeError>;
+    fn on_customs(
+        &mut self,
+        customs: Vec<CommandCustomValue<'a>, SUIT_MAX_ARRAY_LENGTH>,
+    ) -> Result<(), DecodeError>;
 }
 
 #[derive(Debug, Encode)]
