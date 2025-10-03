@@ -8,8 +8,8 @@ use suit_rs::{
 
 struct DemoHandler;
 
-impl<'a> SuitStartHandler<'a> for DemoHandler {
-    fn on_envelope(&mut self, envelope: SuitEnvelope<'a>) -> Result<(), DecodeError> {
+impl SuitStartHandler for DemoHandler {
+    fn on_envelope<'a>(&mut self, envelope: SuitEnvelope<'a>) -> Result<(), DecodeError> {
         let manifest: SuitManifest = envelope.manifest.get()?;
         let common = manifest.common.get()?;
         let _shared_sequence = common.shared_seq.unwrap().get()?;

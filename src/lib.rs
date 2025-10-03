@@ -29,9 +29,9 @@ use minicbor::decode::Error as DecodeError;
 /// * `Ok(())` on success
 /// * `Err(DecodeError)` if decoding fails
 ///
-pub fn suit_decode<'a, H>(data: &'a [u8], handler: &mut H) -> Result<(), DecodeError>
+pub fn suit_decode<H>(data: &[u8], handler: &mut H) -> Result<(), DecodeError>
 where
-    H: suit_manifest::SuitStartHandler<'a>,
+    H: suit_manifest::SuitStartHandler,
 {
     suit_decode::decode_and_dispatch(data, handler)
 }

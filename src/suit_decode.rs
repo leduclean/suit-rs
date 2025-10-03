@@ -338,7 +338,7 @@ impl<'a> SuitSharedSequence<'a> {
     #[allow(dead_code)]
     fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), DecodeError>
     where
-        H: SuitSharedSequenceHandler<'a>,
+        H: SuitSharedSequenceHandler,
     {
         let _ctx = &mut ();
         let mut commands: Vec<SuitSharedCommand<'a>, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
@@ -413,7 +413,7 @@ impl<'a> SuitCommandSequence<'a> {
     #[allow(dead_code)]
     fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), DecodeError>
     where
-        H: SuitCommandHandler<'a>,
+        H: SuitCommandHandler,
     {
         let _ctx = &mut ();
         let mut conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
@@ -524,9 +524,9 @@ impl<'a> SuitCommandSequence<'a> {
 }
 
 /// Starting entry point to decode a SUIT structure and dispatch the decoded items to the handler.
-pub(crate) fn decode_and_dispatch<'a, H>(buf: &'a [u8], handler: &mut H) -> Result<(), DecodeError>
+pub(crate) fn decode_and_dispatch<H>(buf: &[u8], handler: &mut H) -> Result<(), DecodeError>
 where
-    H: SuitStartHandler<'a>,
+    H: SuitStartHandler,
 {
     // on match ici sur le tag qui nous permet d'identifier la variante mais ca serait la meme chose avec des champs à type multiple.
     let mut d = Decoder::new(buf);
@@ -555,8 +555,8 @@ mod tests {
     #[allow(dead_code)]
     struct TestHandler;
 
-    impl<'a> SuitSharedSequenceHandler<'a> for TestHandler {
-        fn on_conditions(
+    impl SuitSharedSequenceHandler for TestHandler {
+        fn on_conditions<'a>(
             &mut self,
             conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
         ) -> Result<(), DecodeError> {
@@ -575,7 +575,7 @@ mod tests {
             Ok(())
         }
 
-        fn on_commands(
+        fn on_commands<'a>(
             &mut self,
             commands: Vec<SuitSharedCommand<'a>, SUIT_MAX_ARRAY_LENGTH>,
         ) -> Result<(), DecodeError> {
@@ -592,8 +592,8 @@ mod tests {
         }
     }
 
-    impl<'a> SuitCommandHandler<'a> for TestHandler {
-        fn on_conditions(
+    impl SuitCommandHandler for TestHandler {
+        fn on_conditions<'a>(
             &mut self,
             conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
         ) -> Result<(), DecodeError> {
@@ -612,7 +612,7 @@ mod tests {
             Ok(())
         }
 
-        fn on_directives(
+        fn on_directives<'a>(
             &mut self,
             directives: Vec<SuitDirective<'a>, SUIT_MAX_ARRAY_LENGTH>,
         ) -> Result<(), DecodeError> {
@@ -632,7 +632,7 @@ mod tests {
             }
             Ok(())
         }
-        fn on_customs(
+        fn on_customs<'a>(
             &mut self,
             customs: Vec<CommandCustomValue<'a>, SUIT_MAX_ARRAY_LENGTH>,
         ) -> Result<(), DecodeError> {
