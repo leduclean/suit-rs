@@ -210,112 +210,6 @@ impl<'a, Ctx> minicbor::Decode<'a, Ctx> for IndexArg {
     }
 }
 
-impl<'a, Ctx> Decode<'a, Ctx> for SuitCommandSequence<'a> {
-    fn decode(d: &mut Decoder<'a>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
-        let mut items: Vec<SuitCommand, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
-        decode_flat_pairs(d, |op, dec| {
-            match op {
-                // Conditions
-                1 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Condition(SuitCondition::VendorIdentifier(
-                        policy,
-                    )));
-                }
-                2 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Condition(SuitCondition::ClassIdentifier(
-                        policy,
-                    )));
-                }
-                3 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Condition(SuitCondition::ImageMatch(policy)));
-                }
-                5 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ =
-                        items.push(SuitCommand::Condition(SuitCondition::ComponentSlot(policy)));
-                }
-                6 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Condition(SuitCondition::CheckContent(policy)));
-                }
-                14 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Condition(SuitCondition::Abort(policy)));
-                }
-                24 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Condition(SuitCondition::DeviceIdentifier(
-                        policy,
-                    )));
-                }
-
-                // Directives
-                18 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Directive(SuitDirective::Write(policy)));
-                }
-                12 => {
-                    let idx = IndexArg::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Directive(SuitDirective::SetComponentIndex(
-                        idx,
-                    )));
-                }
-                32 => {
-                    let seq = LazyCbor::<SuitCommandSequence<'a>>::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Directive(SuitDirective::RunSequence(seq)));
-                }
-                15 => {
-                    let arg = SuitDirectiveTryEachArgument::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Directive(SuitDirective::TryEach(arg)));
-                }
-                20 => {
-                    let params = SuitParameters::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Directive(SuitDirective::OverrideParameters(
-                        params,
-                    )));
-                }
-                21 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Directive(SuitDirective::Fetch(policy)));
-                }
-                22 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Directive(SuitDirective::Copy(policy)));
-                }
-                31 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Directive(SuitDirective::Swap(policy)));
-                }
-                23 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Directive(SuitDirective::Invoke(policy)));
-                }
-
-                // Custom commands (negative int keys)
-                other if other < 0 => {
-                    let v = CommandCustomValue::decode(dec, _ctx)?;
-                    let _ = items.push(SuitCommand::Custom(v));
-                }
-
-                _ => {
-                    #[cfg(any(feature = "defmt", feature = "std"))]
-                    error!("unknow SuitCommandSequence op id: {:?}", op);
-                    return Err(minicbor::decode::Error::message(
-                        "unknow SharedSequence op id",
-                    ));
-                }
-            }
-            Ok(())
-        })?;
-        Ok(SuitCommandSequence {
-            item: CborVec(items),
-        })
-    }
-}
-
 impl<'a, Ctx> minicbor::Decode<'a, Ctx> for CommandCustomValue<'a> {
     fn decode(
         d: &mut minicbor::Decoder<'a>,
@@ -514,6 +408,119 @@ impl<'a> SuitSharedSequence<'a> {
         }
         if !commands.is_empty() {
             handler.on_commands(commands)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> SuitCommandSequence<'a> {
+    fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), DecodeError>
+    where
+        H: SuitCommandHandler<'a>,
+    {
+        let _ctx = &mut ();
+        let mut conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
+        let mut directives: Vec<SuitDirective, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
+        let mut customs: Vec<CommandCustomValue, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
+        let mut d = Decoder::new(self.item);
+
+        decode_flat_pairs(&mut d, |op, dec| {
+            match op {
+                // Conditions
+                1 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = conditions.push(SuitCondition::VendorIdentifier(policy));
+                }
+                2 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = conditions.push(SuitCondition::ClassIdentifier(policy));
+                }
+                3 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = conditions.push(SuitCondition::ImageMatch(policy));
+                }
+                5 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = conditions.push(SuitCondition::ComponentSlot(policy));
+                }
+                6 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = conditions.push(SuitCondition::CheckContent(policy));
+                }
+                14 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = conditions.push(SuitCondition::Abort(policy));
+                }
+                24 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = conditions.push(SuitCondition::DeviceIdentifier(policy));
+                }
+
+                // Directives
+                18 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = directives.push(SuitDirective::Write(policy));
+                }
+                12 => {
+                    let idx = IndexArg::decode(dec, _ctx)?;
+                    let _ = directives.push(SuitDirective::SetComponentIndex(idx));
+                }
+                32 => {
+                    let seq = LazyCbor::<SuitCommandSequence<'a>>::decode(dec, _ctx)?;
+                    let _ = directives.push(SuitDirective::RunSequence(seq));
+                }
+                15 => {
+                    let arg = SuitDirectiveTryEachArgument::decode(dec, _ctx)?;
+                    let _ = directives.push(SuitDirective::TryEach(arg));
+                }
+                20 => {
+                    let params = SuitParameters::decode(dec, _ctx)?;
+                    let _ = directives.push(SuitDirective::OverrideParameters(params));
+                }
+                21 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = directives.push(SuitDirective::Fetch(policy));
+                }
+                22 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = directives.push(SuitDirective::Copy(policy));
+                }
+                31 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = directives.push(SuitDirective::Swap(policy));
+                }
+                23 => {
+                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
+                    let _ = directives.push(SuitDirective::Invoke(policy));
+                }
+
+                // Custom commands (negative int keys)
+                other if other < 0 => {
+                    let v = CommandCustomValue::decode(dec, _ctx)?;
+                    let _ = customs.push(v);
+                }
+
+                _ => {
+                    #[cfg(any(feature = "defmt", feature = "std"))]
+                    error!("unknow SuitCommandSequence op id: {:?}", op);
+                    return Err(minicbor::decode::Error::message(
+                        "unknow SharedSequence op id",
+                    ));
+                }
+            }
+            Ok(())
+        })?;
+
+        if !conditions.is_empty() {
+            handler.on_conditions(conditions)?;
+        }
+
+        if !directives.is_empty() {
+            handler.on_directives(directives)?;
+        }
+
+        if !customs.is_empty() {
+            handler.on_customs(customs)?;
         }
         Ok(())
     }
