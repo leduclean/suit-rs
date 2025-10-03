@@ -79,6 +79,13 @@ where
     }
 }
 
+// We only want the input bytes given to this decoder, doing so, we can treat it after, calling `decode_and_dispatch()`
+impl<'a, C> Decode<'a, C> for RawInput<'a> {
+    fn decode(d: &mut Decoder<'a>, _ctx: &mut C) -> Result<Self, DecodeError> {
+        Ok(RawInput(d.input()))
+    }
+}
+
 impl<'a, Ctx> Decode<'a, Ctx> for SuitAuthenticationBlock<'a> {
     fn decode(d: &mut Decoder<'a>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
         let tag = d.tag()?.as_u64();
@@ -323,6 +330,12 @@ fn is_valid_tag38ltag(bytes: &[u8]) -> bool {
 }
 
 impl<'a> SuitSharedSequence<'a> {
+    // getter for inner raw bytes if needed
+    pub fn get(&self) -> &'a [u8] {
+        self.0.0
+    }
+
+    #[allow(dead_code)]
     fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), DecodeError>
     where
         H: SuitSharedSequenceHandler<'a>,
@@ -332,7 +345,7 @@ impl<'a> SuitSharedSequence<'a> {
         let mut conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
 
         // on match ici sur le tag qui nous permet d'identifier la variante mais ca serait la meme chose avec des champs à type multiple.
-        let mut d = Decoder::new(self.0);
+        let mut d = Decoder::new(self.get());
         decode_flat_pairs(&mut d, |op, dec| {
             match op {
                 // Commands
@@ -392,6 +405,12 @@ impl<'a> SuitSharedSequence<'a> {
 }
 
 impl<'a> SuitCommandSequence<'a> {
+    // getter for inner raw bytes if needed
+    pub fn get(&self) -> &'a [u8] {
+        self.0.0
+    }
+
+    #[allow(dead_code)]
     fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), DecodeError>
     where
         H: SuitCommandHandler<'a>,
@@ -400,7 +419,7 @@ impl<'a> SuitCommandSequence<'a> {
         let mut conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
         let mut directives: Vec<SuitDirective, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
         let mut customs: Vec<CommandCustomValue, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
-        let mut d = Decoder::new(self.item);
+        let mut d = Decoder::new(self.get());
 
         decode_flat_pairs(&mut d, |op, dec| {
             match op {
@@ -532,7 +551,10 @@ where
 
 mod tests {
     use super::*;
+
+    #[allow(dead_code)]
     struct TestHandler;
+
     impl<'a> SuitSharedSequenceHandler<'a> for TestHandler {
         fn on_conditions(
             &mut self,
@@ -570,28 +592,115 @@ mod tests {
         }
     }
 
+    impl<'a> SuitCommandHandler<'a> for TestHandler {
+        fn on_conditions(
+            &mut self,
+            conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
+        ) -> Result<(), DecodeError> {
+            for cond in conditions {
+                assert!(matches!(
+                    cond,
+                    SuitCondition::VendorIdentifier(_)
+                        | SuitCondition::ClassIdentifier(_)
+                        | SuitCondition::ImageMatch(_)
+                        | SuitCondition::ComponentSlot(_)
+                        | SuitCondition::CheckContent(_)
+                        | SuitCondition::Abort(_)
+                        | SuitCondition::DeviceIdentifier(_)
+                ));
+            }
+            Ok(())
+        }
+
+        fn on_directives(
+            &mut self,
+            directives: Vec<SuitDirective<'a>, SUIT_MAX_ARRAY_LENGTH>,
+        ) -> Result<(), DecodeError> {
+            for dir in directives {
+                assert!(matches!(
+                    dir,
+                    SuitDirective::Write(_)
+                        | SuitDirective::SetComponentIndex(_)
+                        | SuitDirective::RunSequence(_)
+                        | SuitDirective::TryEach(_)
+                        | SuitDirective::OverrideParameters(_)
+                        | SuitDirective::Fetch(_)
+                        | SuitDirective::Copy(_)
+                        | SuitDirective::Swap(_)
+                        | SuitDirective::Invoke(_)
+                ));
+            }
+            Ok(())
+        }
+        fn on_customs(
+            &mut self,
+            customs: Vec<CommandCustomValue<'a>, SUIT_MAX_ARRAY_LENGTH>,
+        ) -> Result<(), DecodeError> {
+            for cust in customs {
+                assert!(matches!(
+                    cust,
+                    CommandCustomValue::Bytes(_)
+                        | CommandCustomValue::Text(_)
+                        | CommandCustomValue::Integer(_)
+                        | CommandCustomValue::Nil
+                ))
+            }
+            Ok(())
+        }
+    }
+
     #[test]
     fn test_suit_shared_sequence_decode() {
-        // Minimal flat shared sequence: 1 command + 1 condition
-        const SUIT_SHARED_SEQUENCE_MINIMAL: &[u8] = &[
-            0x84, // CBOR array of 4 elements → 2 pairs (op, arg)
-            // -----------------------
-            // COMMAND: directive-override-parameters (op = 20)
-            0x14, // op 20
-            0xA1, // map(1) → argument map for SuitParameters
-            0x01, // key n(1) = vendor_identifier
-            0x50, // bstr(16) → minimal vendor UUID
-            0xFA, 0x6B, 0x4A, 0x53, 0xD5, 0xAD, 0x5F, 0xDF, 0xBE, 0x9D, 0xE6, 0x63, 0xE4, 0xD4,
-            0x1F, 0xFE,
-            // -----------------------
-            // CONDITION: condition-vendor-identifier (op = 1)
-            0x01, // op 1
-            0x0F, // arg 15
-        ];
-
-        let seq = SuitSharedSequence(SUIT_SHARED_SEQUENCE_MINIMAL.into());
+        // Flat Shared sequence of B.6.Example 5 from ietf suit spec
+        const SUIT_SHARED_SEQUENCE: cboritem::CborItem<'static> = cbor_macro::cbo!(
+            r#"[
+                    / directive-set-component-index / 12,0,
+                    / directive-override-parameters / 20,{
+                        / vendor-id /
+1:h'fa6b4a53d5ad5fdfbe9de663e4d41ffe' / fa6b4a53-d5ad-5fdf-
+be9d-e663e4d41ffe /,
+                        / class-id /
+2:h'1492af1425695e48bf429b2d51f2ab45' /
+1492af14-2569-5e48-bf42-9b2d51f2ab45 /,
+                        / image-digest / 3:<< [
+                            / algorithm-id / -16 / "sha256" /,
+                            / digest-bytes /
+h'00112233445566778899aabbccddeeff0123456789abcdeffedcba9876543210'
+                        ] >>,
+                        / image-size / 14:34768
+                    },
+                    / condition-vendor-identifier / 1,15,
+                    / condition-class-identifier / 2,15,
+                    / directive-set-component-index / 12,1,
+                    / directive-override-parameters / 20,{
+                        / image-digest / 3:<< [
+                            / algorithm-id / -16 / "sha256" /,
+                            / digest-bytes /
+h'0123456789abcdeffedcba987654321000112233445566778899aabbccddeeff'
+                        ] >>,
+                        / image-size / 14:76834
+                    }
+                ]"#
+        );
+        let seq = SuitSharedSequence(RawInput(SUIT_SHARED_SEQUENCE.as_ref()));
         let mut handler = TestHandler;
         seq.decode_and_dispatch(&mut handler).unwrap();
         assert!(seq.decode_and_dispatch(&mut handler).is_ok());
+    }
+
+    #[test]
+    fn test_suit_command_sequence() {
+        // Flat command sequence from validate of B.6 Example 5 from ietf suit spec
+        const SUIT_VALIDATE_COMMAND_SEQUENCE: cboritem::CborItem<'static> = cbor_macro::cbo!(
+            r#"[
+                / directive-set-component-index / 12,0,
+                / condition-image-match / 3,15,
+                / directive-set-component-index / 12,1,
+                / condition-image-match / 3,15
+            ] "#
+        );
+        let seq = SuitCommandSequence(RawInput(SUIT_VALIDATE_COMMAND_SEQUENCE.as_ref()));
+        let mut handler = TestHandler;
+        seq.decode_and_dispatch(&mut handler).unwrap();
     }
 }

@@ -36,6 +36,10 @@ const SUIT_MAX_DATA_SIZE: usize = 8 * 1024 * 1024;
 #[derive(Debug)]
 pub struct CborVec<T, const N: usize>(pub Vec<T, N>);
 
+// Wrapping structure to decode and get the input directly
+#[derive(Debug)]
+pub struct RawInput<'a>(pub &'a [u8]);
+
 // Wrapping structure helper to show the inner cbor structure you are trying to decode
 // ! Make sure it doesn't exists anymore on release
 #[cfg(debug_assertions)]
@@ -210,8 +214,7 @@ pub struct SuitComponents<'a>(
 pub struct ComponentIdentifier<'a>(#[cbor(borrow)] pub CborVec<&'a ByteSlice, SUIT_MAX_INDEX_NUM>);
 
 #[derive(Debug, Encode, Decode)]
-#[cbor(transparent)]
-pub struct SuitSharedSequence<'a>(#[cbor(borrow)] pub(crate) &'a ByteSlice); // + = at least 1
+pub struct SuitSharedSequence<'a>(#[b(0)] pub RawInput<'a>); // + = at least 1
 
 pub trait SuitSharedSequenceHandler<'a> {
     fn on_conditions(
@@ -260,10 +263,7 @@ pub struct SuitDirectiveTryEachArgumentShared<'a> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitCommandSequence<'a> {
-    #[cbor(borrow)]
-    pub item: &'a ByteSlice,
-}
+pub struct SuitCommandSequence<'a>(#[b(0)] pub RawInput<'a>);
 
 pub trait SuitCommandHandler<'a> {
     fn on_conditions(
