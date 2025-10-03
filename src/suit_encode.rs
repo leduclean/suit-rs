@@ -28,3 +28,14 @@ where
         Ok(())
     }
 }
+
+impl<'a, C> Encode<C> for RawInput<'a> {
+    fn encode<W: minicbor::encode::Write>(
+        &self,
+        _e: &mut minicbor::Encoder<W>,
+        _ctx: &mut C,
+    ) -> Result<(), minicbor::encode::Error<W::Error>> {
+        // TODO
+        Ok(())
+    }
+}
