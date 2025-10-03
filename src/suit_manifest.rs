@@ -47,9 +47,9 @@ pub struct RawInput<'a>(pub &'a [u8]);
 #[derive(Encode, Debug)]
 #[cbor(transparent)]
 pub struct Debug<T>(pub T);
-pub trait SuitStartHandler<'a> {
-    fn on_envelope(&mut self, envelope: SuitEnvelope<'a>) -> Result<(), DecodeError>;
-    fn on_manifest(&mut self, manifest: SuitManifest<'a>) -> Result<(), DecodeError>;
+pub trait SuitStartHandler {
+    fn on_envelope<'a>(&mut self, envelope: SuitEnvelope<'a>) -> Result<(), DecodeError>;
+    fn on_manifest<'a>(&mut self, manifest: SuitManifest<'a>) -> Result<(), DecodeError>;
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -216,12 +216,12 @@ pub struct ComponentIdentifier<'a>(#[cbor(borrow)] pub CborVec<&'a ByteSlice, SU
 #[derive(Debug, Encode, Decode)]
 pub struct SuitSharedSequence<'a>(#[b(0)] pub RawInput<'a>); // + = at least 1
 
-pub trait SuitSharedSequenceHandler<'a> {
+pub trait SuitSharedSequenceHandler {
     fn on_conditions(
         &mut self,
         conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
     ) -> Result<(), DecodeError>;
-    fn on_commands(
+    fn on_commands<'a>(
         &mut self,
         commands: Vec<SuitSharedCommand<'a>, SUIT_MAX_ARRAY_LENGTH>,
     ) -> Result<(), DecodeError>;
@@ -265,16 +265,16 @@ pub struct SuitDirectiveTryEachArgumentShared<'a> {
 #[cbor(transparent)]
 pub struct SuitCommandSequence<'a>(#[b(0)] pub RawInput<'a>);
 
-pub trait SuitCommandHandler<'a> {
+pub trait SuitCommandHandler {
     fn on_conditions(
         &mut self,
         conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
     ) -> Result<(), DecodeError>;
-    fn on_directives(
+    fn on_directives<'a>(
         &mut self,
         directives: Vec<SuitDirective<'a>, SUIT_MAX_ARRAY_LENGTH>,
     ) -> Result<(), DecodeError>;
-    fn on_customs(
+    fn on_customs<'a>(
         &mut self,
         customs: Vec<CommandCustomValue<'a>, SUIT_MAX_ARRAY_LENGTH>,
     ) -> Result<(), DecodeError>;
