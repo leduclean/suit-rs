@@ -3,29 +3,31 @@ use minicbor::{
     Decode, Decoder, Encode, Encoder, decode::Error as DecodeError, encode::Error as EncodeError,
 };
 
-/// Lazy wrapper: on decode, for .bstr cbor T, we store the bytes slice but do NOT decode inner T.
-/// Call `.get()` to decode T later if you need acces to data.
-// We borrow a bstr below so we need #[b()] instead of #[n()] of each struct using LazyCbor
+///  On decode, for `.bstr cbor` T, we store the bytes slice in BstrStruct **without** decoding inner T.
+///
+///
+/// Call `get()` to decode T later if needed.
+// We borrow a bstr below so we need #[b()] instead of #[n()] of each struct using BstrStruct
 #[derive(Debug)]
-pub struct LazyCbor<'a, T: 'a> {
+pub(crate) struct BstrStruct<'a, T: 'a> {
     bytes: &'a [u8],
     _ty: PhantomData<&'a T>,
 }
 
-impl<'a, 'bytes: 'a, T, Ctx> Decode<'bytes, Ctx> for LazyCbor<'a, T>
+impl<'a, 'bytes: 'a, T, Ctx> Decode<'bytes, Ctx> for BstrStruct<'a, T>
 where
     T: Decode<'a, Ctx>,
 {
     fn decode(d: &mut Decoder<'bytes>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
         let bytes: &'bytes [u8] = d.bytes()?;
-        Ok(LazyCbor {
+        Ok(BstrStruct {
             bytes,
             _ty: PhantomData,
         })
     }
 }
 
-impl<'a, T, Ctx> Encode<Ctx> for LazyCbor<'a, T>
+impl<'a, T, Ctx> Encode<Ctx> for BstrStruct<'a, T>
 where
     T: Encode<Ctx>,
 {
@@ -40,7 +42,7 @@ where
 }
 
 /// Getter to decode inner T and to get it when needed
-impl<'a, T> LazyCbor<'a, T> {
+impl<'a, T> BstrStruct<'a, T> {
     pub fn get(&self) -> Result<T, DecodeError>
     where
         T: Decode<'a, ()>,
@@ -69,7 +71,7 @@ mod tests {
         let mut d1 = Decoder::new(&LAZY_CBOR_COMMAND_SEQ);
         let mut d2 = Decoder::new(&COMMAND_SEQ);
 
-        let lazy = LazyCbor::<SuitCommandSequence>::decode(&mut d1, &mut ()).unwrap();
+        let lazy = BstrStruct::<SuitCommandSequence>::decode(&mut d1, &mut ()).unwrap();
         let seq = lazy.get().unwrap();
 
         assert_eq!(
