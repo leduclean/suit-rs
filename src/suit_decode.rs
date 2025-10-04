@@ -1,5 +1,4 @@
 use crate::flat_ops::decode_flat_pairs;
-use crate::lazycbor::LazyCbor;
 use crate::suit_cose::*;
 use crate::suit_manifest::*;
 use core::str;
@@ -122,7 +121,7 @@ where
         let ty = d.datatype()?;
         match ty {
             // bstr.cbor case (or generic bytes wrapper for the CBOR value)
-            // Call T::decode on the current decoder: if T is LazyCbor<'a, >,
+            // Call T::decode on the current decoder: if T is BstrStruct<'a, >,
             // it will call d.bytes() and then decode the inner CBOR.
             Type::Bytes => {
                 let t = T::decode(d, _ctx)?;
@@ -354,7 +353,7 @@ impl<'a> SuitSharedSequence<'a> {
                     let _ = commands.push(SuitSharedCommand::SetComponentIndex(idx));
                 }
                 32 => {
-                    let seq = LazyCbor::<SuitSharedSequence>::decode(dec, _ctx)?;
+                    let seq = BstrSuitSharedSequence::decode(dec, _ctx)?;
                     let _ = commands.push(SuitSharedCommand::RunSequence(seq));
                 }
                 15 => {
@@ -463,7 +462,7 @@ impl<'a> SuitCommandSequence<'a> {
                     let _ = directives.push(SuitDirective::SetComponentIndex(idx));
                 }
                 32 => {
-                    let seq = LazyCbor::<SuitCommandSequence<'a>>::decode(dec, _ctx)?;
+                    let seq = BstrSuitCommandSequence::decode(dec, _ctx)?;
                     let _ = directives.push(SuitDirective::RunSequence(seq));
                 }
                 15 => {

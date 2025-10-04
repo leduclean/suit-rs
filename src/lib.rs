@@ -9,8 +9,8 @@ extern crate alloc;
 #[macro_use]
 mod suit_debug_log;
 
+mod bstr_struct;
 mod flat_ops;
-mod lazycbor;
 mod suit_cose;
 mod suit_decode;
 mod suit_encode;
