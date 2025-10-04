@@ -1,4 +1,4 @@
-use crate::lazycbor::LazyCbor;
+use crate::bstr_struct::BstrStruct;
 use crate::suit_cose::*;
 use heapless::Vec;
 use minicbor::{
@@ -32,6 +32,34 @@ const SUIT_MAX_ARGS_LENGTH: usize = 64;
 #[allow(dead_code)]
 const SUIT_MAX_DATA_SIZE: usize = 8 * 1024 * 1024;
 
+/* -------------------------------------------------------------------------- */
+/*                                bstr Wrappers                               */
+/* -------------------------------------------------------------------------- */
+
+macro_rules! bstr_wrapper {
+    ($name:ident, $inner:ty) => {
+        #[derive(Debug, Encode, Decode)]
+        #[cbor(transparent)]
+        pub struct $name<'a>(#[cbor(borrow)] pub(crate) BstrStruct<'a, $inner>);
+
+        impl<'a> $name<'a> {
+            pub fn get(&self) -> Result<$inner, DecodeError> {
+                self.0.get()
+            }
+        }
+    };
+}
+
+bstr_wrapper!(BstrSuitDigest, SuitDigest<'a>);
+bstr_wrapper!(BstrSuitAuthenticationBlock, SuitAuthenticationBlock<'a>);
+bstr_wrapper!(BstrSuitAuthentication, SuitAuthentication<'a>);
+bstr_wrapper!(BstrSuitCommon, SuitCommon<'a>);
+bstr_wrapper!(BstrSuitCommandSequence, SuitCommandSequence<'a>);
+bstr_wrapper!(BstrSuitTextMap, SuitTextMap<'a>);
+bstr_wrapper!(BstrSuitManifest, SuitManifest<'a>);
+bstr_wrapper!(BstrSuitSharedSequence, SuitSharedSequence<'a>);
+/* -------------------------------------------------------------------------- */
+
 // We overcharge the heapless Vec<T,N> to impl decode trait on it
 #[derive(Debug)]
 pub struct CborVec<T, const N: usize>(pub Vec<T, N>);
@@ -56,9 +84,9 @@ pub trait SuitStartHandler {
 #[cbor(map)]
 pub struct SuitEnvelope<'a> {
     #[b(2)] // we borrow a bstr so we need #[b()] instead of #[n()]
-    pub wrapper: LazyCbor<'a, SuitAuthentication<'a>>,
+    pub wrapper: BstrSuitAuthentication<'a>,
     #[b(3)]
-    pub manifest: LazyCbor<'a, SuitManifest<'a>>,
+    pub manifest: BstrSuitManifest<'a>,
     #[n(4)]
     manifest_members: Option<CborVec<SuitSeverableManifestMembers<'a>, SUIT_MAX_ARRAY_LENGTH>>,
     #[n(5)]
@@ -77,9 +105,9 @@ pub struct SuitPayload<'a> {
 #[cbor(array)]
 pub struct SuitAuthentication<'a> {
     #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
-    pub digest: LazyCbor<'a, SuitDigest<'a>>,
+    pub digest: BstrSuitDigest<'a>,
     #[b(1)]
-    pub authentications_keys: Option<LazyCbor<'a, SuitAuthenticationBlock<'a>>>, //TODO  zero or more
+    pub authentications_keys: Option<BstrSuitAuthenticationBlock<'a>>, //TODO  zero or more
 }
 
 #[derive(Debug, Encode)]
@@ -136,7 +164,7 @@ pub struct SuitManifest<'a> {
     pub sequence_number: u64,
 
     #[b(3)] // we borrow a bstr so we need #[b()] instead of #[n()]
-    pub common: LazyCbor<'a, SuitCommon<'a>>,
+    pub common: BstrSuitCommon<'a>,
 
     #[n(4)]
     pub reference_uri: Option<&'a str>,
@@ -144,24 +172,24 @@ pub struct SuitManifest<'a> {
     // Unseverable members (top-level keys in manifest: 7,8,9)
     // SUIT_Unseverable_Members are not under a single key: they are individual optional keys.
     #[b(7)]
-    pub validate: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-validate
+    pub validate: Option<BstrSuitCommandSequence<'a>>, // ? suit-validate
 
     #[b(8)]
-    pub load: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-load
+    pub load: Option<BstrSuitCommandSequence<'a>>, // ? suit-load
 
     #[b(9)]
-    pub invoke: Option<LazyCbor<'a, SuitCommandSequence<'a>>>, // ? suit-invoke
+    pub invoke: Option<BstrSuitCommandSequence<'a>>, // ? suit-invoke
 
     // Severable members choice (top-level keys: 16,20,23)
     // each may be a Digest or a bstr.cbor SUIT_Command_Sequence / SUIT_Text_Map
     #[b(16)]
-    pub payload_fetch: Option<DigestOrCbor<'a, LazyCbor<'a, SuitCommandSequence<'a>>>>,
+    pub payload_fetch: Option<DigestOrCbor<'a, BstrSuitCommandSequence<'a>>>,
 
     #[b(20)]
-    pub install: Option<DigestOrCbor<'a, LazyCbor<'a, SuitCommandSequence<'a>>>>,
+    pub install: Option<DigestOrCbor<'a, BstrSuitCommandSequence<'a>>>,
 
     #[b(23)]
-    pub text: Option<DigestOrCbor<'a, LazyCbor<'a, SuitTextMap<'a>>>>,
+    pub text: Option<DigestOrCbor<'a, BstrSuitTextMap<'a>>>,
     // Any future extensions will be ignored/omitted by derive (or add a catch-all decode if needed)
 }
 
@@ -169,13 +197,13 @@ pub struct SuitManifest<'a> {
 #[cbor(map)]
 pub struct SuitSeverableManifestMembers<'a> {
     #[b(16)]
-    pub payload_fetch: Option<LazyCbor<'a, SuitCommandSequence<'a>>>,
+    pub payload_fetch: Option<BstrSuitCommandSequence<'a>>,
 
     #[b(20)]
-    pub install: Option<LazyCbor<'a, SuitCommandSequence<'a>>>,
+    pub install: Option<BstrSuitCommandSequence<'a>>,
 
     #[b(23)]
-    pub text: Option<LazyCbor<'a, SuitTextMap<'a>>>,
+    pub text: Option<BstrSuitTextMap<'a>>,
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -201,7 +229,7 @@ pub struct SuitCommon<'a> {
     #[n(2)]
     pub components: SuitComponents<'a>, // TODO += at least 1
     #[b(4)] // we borrow bstr
-    pub shared_seq: Option<LazyCbor<'a, SuitSharedSequence<'a>>>,
+    pub shared_seq: Option<BstrSuitSharedSequence<'a>>,
 }
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
@@ -235,7 +263,7 @@ pub enum SuitSharedCommand<'a> {
     RunSequence(
         #[b(0)]
         // we borrow a bstr so we need #[b()] instead of #[n()]
-        LazyCbor<'a, SuitSharedSequence<'a>>,
+        BstrSuitSharedSequence<'a>,
     ),
     #[n(15)]
     TryEach(#[n(0)] SuitDirectiveTryEachArgumentShared<'a>),
@@ -258,7 +286,7 @@ pub enum IndexArg {
 #[cbor(transparent)]
 pub struct SuitDirectiveTryEachArgumentShared<'a> {
     #[cbor(borrow)]
-    pub sequences: Option<CborVec<LazyCbor<'a, SuitSharedSequence<'a>>, SUIT_MAX_ARRAY_LENGTH>>, // 2* bstr.cbor SUIT_Shared_Sequence
+    pub sequences: Option<CborVec<BstrSuitSharedSequence<'a>, SUIT_MAX_ARRAY_LENGTH>>, // 2* bstr.cbor SUIT_Shared_Sequence
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -342,7 +370,7 @@ pub enum SuitDirective<'a> {
     #[n(32)]
     RunSequence(
         #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
-        LazyCbor<'a, SuitCommandSequence<'a>>,
+        BstrSuitCommandSequence<'a>,
     ),
 
     #[b(15)]
@@ -367,7 +395,7 @@ pub enum SuitDirective<'a> {
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitDirectiveTryEachArgument<'a>(
-    #[cbor(borrow)] pub CborVec<LazyCbor<'a, SuitCommandSequence<'a>>, SUIT_MAX_ARRAY_LENGTH>,
+    #[cbor(borrow)] pub CborVec<BstrSuitCommandSequence<'a>, SUIT_MAX_ARRAY_LENGTH>,
 );
 
 #[derive(Debug, Encode, Decode)]
@@ -379,7 +407,7 @@ pub struct SuitParameters<'a> {
     #[n(2)]
     pub class_identifier: Option<Rfc4122Uuid>,
     #[b(3)] // We borrow the bstr
-    pub image_digest: Option<LazyCbor<'a, SuitDigest<'a>>>,
+    pub image_digest: Option<BstrSuitDigest<'a>>,
     #[n(5)]
     pub component_slot: Option<u64>,
     #[n(12)]
