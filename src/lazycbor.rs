@@ -45,9 +45,36 @@ impl<'a, T> LazyCbor<'a, T> {
     where
         T: Decode<'a, ()>,
     {
-        // Using OnceCell allows us to init the cache
-        // without a &mut self reference (unsafe)
         let mut decoder = Decoder::new(self.bytes);
         T::decode(&mut decoder, &mut ())
+    }
+}
+
+mod tests {
+    #[test]
+    fn test_lazy_cbor_decode_and_get_on_command_seq() {
+        use super::*;
+        use crate::suit_manifest::SuitCommandSequence;
+        // We use `<< >>`  diagnostic notation to create bstr wrapped struct
+        const LAZY_CBOR_COMMAND_SEQ: cboritem::CborItem<'_> = cbor_macro::cbo!(
+            r#"<< [
+                / condition-image-match / 3,15] >>
+             "#
+        );
+        const COMMAND_SEQ: cboritem::CborItem<'static> = cbor_macro::cbo!(
+            r#"[
+                / condition-image-match / 3,15
+            ]"#
+        );
+        let mut d1 = Decoder::new(&LAZY_CBOR_COMMAND_SEQ);
+        let mut d2 = Decoder::new(&COMMAND_SEQ);
+
+        let lazy = LazyCbor::<SuitCommandSequence>::decode(&mut d1, &mut ()).unwrap();
+        let seq = lazy.get().unwrap();
+
+        assert_eq!(
+            seq.get(),
+            SuitCommandSequence::decode(&mut d2, &mut ()).unwrap().get()
+        )
     }
 }
