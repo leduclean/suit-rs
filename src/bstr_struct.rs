@@ -75,8 +75,8 @@ mod tests {
         let seq = lazy.get().unwrap();
 
         assert_eq!(
-            seq.get(),
-            SuitCommandSequence::decode(&mut d2, &mut ()).unwrap().get()
+            seq.0.0,
+            SuitCommandSequence::decode(&mut d2, &mut ()).unwrap().0.0
         )
     }
 }
