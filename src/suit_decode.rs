@@ -329,11 +329,6 @@ fn is_valid_tag38ltag(bytes: &[u8]) -> bool {
 }
 
 impl<'a> SuitSharedSequence<'a> {
-    // getter for inner raw bytes if needed
-    pub fn get(&self) -> &'a [u8] {
-        self.0.0
-    }
-
     #[allow(dead_code)]
     fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), DecodeError>
     where
@@ -344,7 +339,7 @@ impl<'a> SuitSharedSequence<'a> {
         let mut conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
 
         // on match ici sur le tag qui nous permet d'identifier la variante mais ca serait la meme chose avec des champs à type multiple.
-        let mut d = Decoder::new(self.get());
+        let mut d = Decoder::new(self.0.0);
         decode_flat_pairs(&mut d, |op, dec| {
             match op {
                 // Commands
@@ -404,11 +399,6 @@ impl<'a> SuitSharedSequence<'a> {
 }
 
 impl<'a> SuitCommandSequence<'a> {
-    // getter for inner raw bytes if needed
-    pub fn get(&self) -> &'a [u8] {
-        self.0.0
-    }
-
     #[allow(dead_code)]
     fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), DecodeError>
     where
@@ -418,7 +408,7 @@ impl<'a> SuitCommandSequence<'a> {
         let mut conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
         let mut directives: Vec<SuitDirective, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
         let mut customs: Vec<CommandCustomValue, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
-        let mut d = Decoder::new(self.get());
+        let mut d = Decoder::new(self.0.0);
 
         decode_flat_pairs(&mut d, |op, dec| {
             match op {
