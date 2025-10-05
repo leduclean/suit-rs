@@ -1,6 +1,3 @@
-#[cfg(any(feature = "std", feature = "defmt"))]
-use crate::suit_decode::type_to_str;
-
 use crate::suit_manifest::CborVec;
 use core::str;
 use minicbor::{
@@ -181,7 +178,7 @@ impl<'a, Ctx> Decode<'a, Ctx> for TstrOrInt<'a> {
                 #[cfg(any(feature = "defmt", feature = "std"))]
                 error!(
                     "SuitAuthenticationBlock: unexpected type: {:?}",
-                    type_to_str(ty)
+                    defmt::Display2Format(&ty)
                 );
                 Err(minicbor::decode::Error::message(
                     "unexpected type for SuitAuthenticationBlock",
