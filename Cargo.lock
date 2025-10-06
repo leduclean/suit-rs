@@ -653,6 +653,7 @@ dependencies = [
  "minicbor",
  "once_cell",
  "rusty-hook",
+ "thiserror",
 ]
 
 [[package]]
