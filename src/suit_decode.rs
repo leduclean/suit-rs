@@ -12,7 +12,7 @@ use minicbor::{
 };
 
 /// Helper to log if push failed in a heapless vec
-pub(crate) fn vec_push_or_error<T: core::fmt::Debug, const N: usize>(
+fn vec_push_or_error<T: core::fmt::Debug, const N: usize>(
     vec: &mut heapless::Vec<T, N>,
     item: T,
     context: &'static str,
