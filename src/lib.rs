@@ -10,13 +10,14 @@ extern crate alloc;
 mod suit_debug_log;
 
 mod bstr_struct;
+mod errors;
 mod flat_ops;
 mod suit_cose;
 mod suit_decode;
 mod suit_encode;
 pub mod suit_manifest;
 
-use minicbor::decode::Error as DecodeError;
+pub use errors::SuitError;
 /// Decode a SUIT manifest from raw bytes into a handler.
 ///
 /// # Arguments
@@ -27,9 +28,9 @@ use minicbor::decode::Error as DecodeError;
 /// # Returns
 ///
 /// * `Ok(())` on success
-/// * `Err(DecodeError)` if decoding fails
+/// * `Err(SuitError)` if decoding fails
 ///
-pub fn suit_decode<H>(data: &[u8], handler: &mut H) -> Result<(), DecodeError>
+pub fn suit_decode<H>(data: &[u8], handler: &mut H) -> Result<(), SuitError>
 where
     H: suit_manifest::SuitStartHandler,
 {

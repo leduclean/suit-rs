@@ -1,5 +1,5 @@
-use crate::bstr_struct::BstrStruct;
 use crate::suit_cose::*;
+use crate::{bstr_struct::BstrStruct, errors::SuitError};
 use heapless::Vec;
 use minicbor::{
     Decode, Encode,
@@ -24,7 +24,7 @@ const SUIT_MAX_COMPONENT_NUM: usize = 3;
 
 const SUIT_MAX_DEPENDENCY_NUM: usize = 1;
 
-const SUIT_MAX_INDEX_NUM: usize = SUIT_MAX_COMPONENT_NUM + SUIT_MAX_DEPENDENCY_NUM;
+pub const SUIT_MAX_INDEX_NUM: usize = SUIT_MAX_COMPONENT_NUM + SUIT_MAX_DEPENDENCY_NUM;
 
 #[allow(dead_code)]
 const SUIT_MAX_ARGS_LENGTH: usize = 64;
@@ -43,7 +43,7 @@ macro_rules! bstr_wrapper {
         pub struct $name<'a>(#[cbor(borrow)] pub(crate) BstrStruct<'a, $inner>);
 
         impl<'a> $name<'a> {
-            pub fn get(&self) -> Result<$inner, DecodeError> {
+            pub fn get(&self) -> Result<$inner, SuitError> {
                 self.0.get()
             }
         }
@@ -76,8 +76,8 @@ pub struct RawInput<'a>(pub &'a [u8]);
 #[cbor(transparent)]
 pub struct Debug<T>(pub T);
 pub trait SuitStartHandler {
-    fn on_envelope<'a>(&mut self, envelope: SuitEnvelope<'a>) -> Result<(), DecodeError>;
-    fn on_manifest<'a>(&mut self, manifest: SuitManifest<'a>) -> Result<(), DecodeError>;
+    fn on_envelope<'a>(&mut self, envelope: SuitEnvelope<'a>) -> Result<(), SuitError>;
+    fn on_manifest<'a>(&mut self, manifest: SuitManifest<'a>) -> Result<(), SuitError>;
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -297,15 +297,15 @@ pub trait SuitCommandHandler {
     fn on_conditions(
         &mut self,
         conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
-    ) -> Result<(), DecodeError>;
+    ) -> Result<(), SuitError>;
     fn on_directives<'a>(
         &mut self,
         directives: Vec<SuitDirective<'a>, SUIT_MAX_ARRAY_LENGTH>,
-    ) -> Result<(), DecodeError>;
+    ) -> Result<(), SuitError>;
     fn on_customs<'a>(
         &mut self,
         customs: Vec<CommandCustomValue<'a>, SUIT_MAX_ARRAY_LENGTH>,
-    ) -> Result<(), DecodeError>;
+    ) -> Result<(), SuitError>;
 }
 
 #[derive(Debug, Encode)]

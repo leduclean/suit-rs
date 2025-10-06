@@ -1,3 +1,4 @@
+pub use crate::errors::SuitError;
 use crate::flat_ops::decode_flat_pairs;
 use crate::suit_cose::*;
 use crate::suit_manifest::*;
@@ -9,6 +10,16 @@ use minicbor::{
     data::Type,
     decode::{ArrayIterWithCtx, Error as DecodeError},
 };
+
+/// Helper to log if push failed in a heapless vec
+fn vec_push_or_error<T: core::fmt::Debug, const N: usize>(
+    vec: &mut heapless::Vec<T, N>,
+    item: T,
+    context: &'static str,
+) -> Result<(), SuitError> {
+    vec.push(item)
+        .map_err(|_| SuitError::vec_overflow(N).with_ctx(context))
+}
 
 #[cfg(all(feature = "alloc", feature = "defmt"))]
 use minicbor::display;
@@ -28,53 +39,21 @@ where
     }
 }
 
-#[cfg(any(feature = "std", feature = "defmt"))]
-// helper to log with info! the right Type encountered
-pub fn type_to_str(t: Type) -> &'static str {
-    match t {
-        Type::U8 => "U8",
-        Type::U16 => "U16",
-        Type::U32 => "U32",
-        Type::U64 => "U64",
-        Type::I8 => "I8",
-        Type::I16 => "I16",
-        Type::I32 => "I32",
-        Type::I64 => "I64",
-        Type::F16 => "Float16",
-        Type::F32 => "Float32",
-        Type::F64 => "Float64",
-        Type::Bytes => "Bytes",
-        Type::String => "String",
-        Type::Array => "Array",
-        Type::Map => "Map",
-        Type::Tag => "Tag",
-        Type::Simple => "Simple",
-        Type::Bool => "Bool",
-        Type::Null => "Null",
-        Type::Undefined => "Undefined",
-        Type::Break => "Break",
-        _ => "Unknown",
-    }
-}
-
 impl<'a, T, Ctx, const N: usize> Decode<'a, Ctx> for CborVec<T, N>
 where
-    T: Decode<'a, Ctx>,
+    T: Decode<'a, Ctx> + core::fmt::Debug,
 {
     fn decode(d: &mut Decoder<'a>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
         let iter: ArrayIterWithCtx<_, T> = d.array_iter_with(ctx)?;
-        let mut v: Vec<T, N> = Vec::new();
+        let mut vec: Vec<T, N> = Vec::new();
 
         for x in iter {
             let item = x?;
-            v.push(item).map_err(|_item| {
-                #[cfg(any(feature = "defmt", feature = "std"))]
-                error!("Too many items in a heapless Vec");
-                DecodeError::message("Too many items in a Vec")
-            })?;
+            vec.push(item)
+                .map_err(|_| DecodeError::message("Inner decoding buffer is full"))?;
         }
 
-        Ok(CborVec(v))
+        Ok(CborVec(vec))
     }
 }
 
@@ -87,8 +66,8 @@ impl<'a, C> Decode<'a, C> for RawInput<'a> {
 
 impl<'a, Ctx> Decode<'a, Ctx> for SuitAuthenticationBlock<'a> {
     fn decode(d: &mut Decoder<'a>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
-        let tag = d.tag()?.as_u64();
-        match tag {
+        let tag = d.tag()?;
+        match tag.as_u64() {
             98 => Ok(SuitAuthenticationBlock::Sign(
                 d.decode_with::<Ctx, CoseSign>(_ctx)?,
             )),
@@ -102,13 +81,8 @@ impl<'a, Ctx> Decode<'a, Ctx> for SuitAuthenticationBlock<'a> {
                 d.decode_with::<Ctx, CoseMac0>(_ctx)?,
             )),
 
-            _ => {
-                #[cfg(any(feature = "defmt", feature = "std"))]
-                error!("SuitAuthenticationBlock: unexpected tag: {:?}", tag);
-                Err(minicbor::decode::Error::message(
-                    "unexpected tag for SuitAuthenticationBlock",
-                ))
-            }
+            _ => Err(minicbor::decode::Error::tag_mismatch(tag)
+                .with_message("SuitAuthenticationBlock: unexpected tag value")),
         }
     }
 }
@@ -134,25 +108,14 @@ where
                 let digest = SuitDigest::decode(d, _ctx)?;
                 Ok(DigestOrCbor::Digest(digest))
             }
-            _ => {
-                #[cfg(any(feature = "defmt", feature = "std"))]
-                error!(
-                    "SuitAuthenticationBlock: unexpected type: {:?}",
-                    type_to_str(ty)
-                );
-                Err(minicbor::decode::Error::message(
-                    "unexpected type for SuitAuthenticationBlock",
-                ))
-            }
+            _ => Err(minicbor::decode::Error::type_mismatch(ty)
+                .with_message("DigestOrCbor: expected Bytes (CBOR bstr.cbor) or Array (digest)")),
         }
     }
 }
 
 impl<'a, Ctx> minicbor::Decode<'a, Ctx> for IndexArg {
-    fn decode(
-        d: &mut minicbor::Decoder<'a>,
-        _ctx: &mut Ctx,
-    ) -> Result<Self, minicbor::decode::Error> {
+    fn decode(d: &mut minicbor::Decoder<'a>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
         let ty = d.datatype()?;
         match ty {
             Type::U8 | Type::U16 | Type::U32 | Type::U64 => {
@@ -167,38 +130,31 @@ impl<'a, Ctx> minicbor::Decode<'a, Ctx> for IndexArg {
 
             Type::Array => {
                 let len = d.array()?;
-                let mut vec = Vec::new();
+                let mut vec: Vec<u64, SUIT_MAX_INDEX_NUM> = Vec::new();
                 if let Some(n) = len {
                     for _ in 0..n {
-                        let _ = vec.push(d.u64()?);
+                        vec.push(d.u64()?).map_err(|_| {
+                            DecodeError::message("Inner Index Arg decoding buffer is full")
+                        })?;
                     }
                 } else {
                     loop {
                         if let Type::Break = d.datatype()? {
                             break;
                         }
-                        let _ = vec.push(d.u64()?);
                     }
                 }
                 Ok(IndexArg::Multiple(CborVec(vec)))
             }
 
-            _ => {
-                #[cfg(any(feature = "defmt", feature = "std"))]
-                error!("IndexArg: unexpected type: {:?}", type_to_str(ty));
-                Err(minicbor::decode::Error::message(
-                    "unexpected type for IndexArg",
-                ))
-            }
+            _ => Err(minicbor::decode::Error::type_mismatch(ty)
+                .with_message("IndexArg: expected Number | Bool | Array")),
         }
     }
 }
 
 impl<'a, Ctx> minicbor::Decode<'a, Ctx> for CommandCustomValue<'a> {
-    fn decode(
-        d: &mut minicbor::Decoder<'a>,
-        _ctx: &mut Ctx,
-    ) -> Result<Self, minicbor::decode::Error> {
+    fn decode(d: &mut minicbor::Decoder<'a>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
         let ty = d.datatype()?;
         match ty {
             Type::Bytes => Ok(CommandCustomValue::Bytes(d.bytes()?)),
@@ -220,19 +176,14 @@ impl<'a, Ctx> minicbor::Decode<'a, Ctx> for CommandCustomValue<'a> {
                 Ok(CommandCustomValue::Nil)
             }
 
-            _ => {
-                #[cfg(any(feature = "defmt", feature = "std"))]
-                error!("CommandCustomValue: unexpected type: {:?}", type_to_str(ty));
-                Err(minicbor::decode::Error::message(
-                    "unexpected type for CommandCustomValue",
-                ))
-            }
+            _ => Err(minicbor::decode::Error::type_mismatch(ty)
+                .with_message("CommandCustomValue: expected Bytes | String | number | Null")),
         }
     }
 }
 
 /// Helper : accept RFC4122 UUID (bstr len 16) or cbor-pen tag (#6.112 (bstr))
-pub fn decode_uuid_or_cborpen<'a, Ctx>(
+pub(crate) fn decode_uuid_or_cborpen<'a, Ctx>(
     d: &mut Decoder<'a>,
     _ctx: &mut Ctx,
 ) -> Result<Option<&'a ByteSlice>, DecodeError> {
@@ -244,27 +195,25 @@ pub fn decode_uuid_or_cborpen<'a, Ctx>(
                 let b = d.bytes()?;
                 if b.len() > 16 {
                     #[cfg(any(feature = "defmt", feature = "std"))]
-                    error!("The UUID is too long (more than 16 bytes)");
+                    error!(
+                        "UUID/CborPen: invalid length {} (expected <= 16). Raw bytes (first 32 bytes): {:?}",
+                        b.len(),
+                        defmt::Debug2Format(&b[..core::cmp::min(b.len(), 32)])
+                    );
                     Err(minicbor::decode::Error::message(
-                        "expected UUID or cbor-pen got other type",
+                        "UUID is too long (more than 16 bytes)",
                     ))
                 } else {
                     Ok(Some(<&ByteSlice>::from(b)))
                 }
             } else {
-                Err(minicbor::decode::Error::message(
-                    "expected tag 112 for cbor-pen",
-                ))
+                Err(minicbor::decode::Error::type_mismatch(ty)
+                    .with_message("UUID/CborPen: unexpected tag"))
             }
         }
         Type::Bytes => Ok(Some(d.bytes().map(<&ByteSlice>::from)?)),
-        _ => {
-            #[cfg(any(feature = "defmt", feature = "std"))]
-            error!("expected UUID or cbor-pen, got {:?}", type_to_str(ty));
-            Err(minicbor::decode::Error::message(
-                "expected UUID or cbor-pen got other type",
-            ))
-        }
+        _ => Err(minicbor::decode::Error::type_mismatch(ty)
+            .with_message("UUID/CborPen: expected UUID or cbor-pen")),
     }
 }
 
@@ -282,11 +231,21 @@ impl<'a, C> Decode<'a, C> for Tag38LTag<'a> {
         if is_valid_tag38ltag(tag_bytes) {
             Ok(Tag38LTag(str::from_utf8(tag_bytes).map_err(|_e| {
                 #[cfg(any(feature = "defmt", feature = "std"))]
-                error!("Utf8 error for tag38ltag at: {:?}", _e.valid_up_to());
+                error!(
+                    "Utf8 error for Tag38LTag: valid_up_to={}, raw (first 32 bytes): {:?}",
+                    _e.valid_up_to(),
+                    defmt::Debug2Format(&tag_bytes[..core::cmp::min(tag_bytes.len(), 32)])
+                );
                 DecodeError::message("Utf8 parsing error for Tag38LTag")
             })?))
         } else {
-            Err(DecodeError::message("Invalid tag38-ltag format"))
+            #[cfg(any(feature = "defmt", feature = "std"))]
+            error!(
+                "Invalid Tag38LTag format for bytes (len={}): {:?}",
+                tag_bytes.len(),
+                defmt::Debug2Format(&tag_bytes[..core::cmp::min(tag_bytes.len(), 32)])
+            );
+            Err(DecodeError::message("Invalid Tag38LTag format"))
         }
     }
 }
@@ -330,7 +289,7 @@ fn is_valid_tag38ltag(bytes: &[u8]) -> bool {
 
 impl<'a> SuitSharedSequence<'a> {
     #[allow(dead_code)]
-    fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), DecodeError>
+    fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitSharedSequenceHandler,
     {
@@ -338,29 +297,40 @@ impl<'a> SuitSharedSequence<'a> {
         let mut commands: Vec<SuitSharedCommand<'a>, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
         let mut conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
 
-        // on match ici sur le tag qui nous permet d'identifier la variante mais ca serait la meme chose avec des champs à type multiple.
         let mut d = Decoder::new(self.0.0);
         decode_flat_pairs(&mut d, |op, dec| {
             match op {
                 // Commands
                 12 => {
                     let idx = IndexArg::decode(dec, _ctx)?;
-                    let _ = commands.push(SuitSharedCommand::SetComponentIndex(idx));
+                    vec_push_or_error(
+                        &mut commands,
+                        SuitSharedCommand::SetComponentIndex(idx),
+                        "commands",
+                    )?;
                 }
                 32 => {
                     let seq = BstrSuitSharedSequence::decode(dec, _ctx)?;
-                    let _ = commands.push(SuitSharedCommand::RunSequence(seq));
+                    vec_push_or_error(
+                        &mut commands,
+                        SuitSharedCommand::RunSequence(seq),
+                        "commands",
+                    )?;
                 }
                 15 => {
                     let arg = SuitDirectiveTryEachArgumentShared::decode(dec, _ctx)?;
-                    let _ = commands.push(SuitSharedCommand::TryEach(arg));
+                    vec_push_or_error(&mut commands, SuitSharedCommand::TryEach(arg), "commands")?;
                 }
                 20 => {
                     let params = SuitParameters::decode(dec, _ctx)?;
-                    let _ = commands.push(SuitSharedCommand::OverrideParameters(params));
+                    vec_push_or_error(
+                        &mut commands,
+                        SuitSharedCommand::OverrideParameters(params),
+                        "commands",
+                    )?;
                 }
 
-                // Conditions (all consume SuitRepPolicy)
+                // Conditions
                 1 | 2 | 3 | 5 | 6 | 14 | 24 => {
                     let policy = SuitRepPolicy::decode(dec, _ctx)?;
                     let cond = match op {
@@ -373,15 +343,13 @@ impl<'a> SuitSharedSequence<'a> {
                         24 => SuitCondition::DeviceIdentifier(policy),
                         _ => unreachable!(),
                     };
-                    let _ = conditions.push(cond);
+                    vec_push_or_error(&mut conditions, cond, "conditions")?;
                 }
 
                 _ => {
-                    #[cfg(any(feature = "defmt", feature = "std"))]
-                    error!("unknow SharedSequence op id: {:?}", op);
-                    return Err(minicbor::decode::Error::message(
-                        "unknow SharedSequence op id",
-                    ));
+                    return Err(DecodeError::unknown_variant(op)
+                        .with_message("SharedSequence: unknown op id")
+                        .into());
                 }
             }
 
@@ -400,7 +368,7 @@ impl<'a> SuitSharedSequence<'a> {
 
 impl<'a> SuitCommandSequence<'a> {
     #[allow(dead_code)]
-    fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), DecodeError>
+    fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitCommandHandler,
     {
@@ -413,85 +381,100 @@ impl<'a> SuitCommandSequence<'a> {
         decode_flat_pairs(&mut d, |op, dec| {
             match op {
                 // Conditions
-                1 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = conditions.push(SuitCondition::VendorIdentifier(policy));
-                }
-                2 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = conditions.push(SuitCondition::ClassIdentifier(policy));
-                }
-                3 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = conditions.push(SuitCondition::ImageMatch(policy));
-                }
-                5 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = conditions.push(SuitCondition::ComponentSlot(policy));
-                }
-                6 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = conditions.push(SuitCondition::CheckContent(policy));
-                }
-                14 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = conditions.push(SuitCondition::Abort(policy));
-                }
-                24 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = conditions.push(SuitCondition::DeviceIdentifier(policy));
-                }
+                1 => vec_push_or_error(
+                    &mut conditions,
+                    SuitCondition::VendorIdentifier(SuitRepPolicy::decode(dec, _ctx)?),
+                    "conditions",
+                )?,
+                2 => vec_push_or_error(
+                    &mut conditions,
+                    SuitCondition::ClassIdentifier(SuitRepPolicy::decode(dec, _ctx)?),
+                    "conditions",
+                )?,
+                3 => vec_push_or_error(
+                    &mut conditions,
+                    SuitCondition::ImageMatch(SuitRepPolicy::decode(dec, _ctx)?),
+                    "conditions",
+                )?,
+                5 => vec_push_or_error(
+                    &mut conditions,
+                    SuitCondition::ComponentSlot(SuitRepPolicy::decode(dec, _ctx)?),
+                    "conditions",
+                )?,
+                6 => vec_push_or_error(
+                    &mut conditions,
+                    SuitCondition::CheckContent(SuitRepPolicy::decode(dec, _ctx)?),
+                    "conditions",
+                )?,
+                14 => vec_push_or_error(
+                    &mut conditions,
+                    SuitCondition::Abort(SuitRepPolicy::decode(dec, _ctx)?),
+                    "conditions",
+                )?,
+                24 => vec_push_or_error(
+                    &mut conditions,
+                    SuitCondition::DeviceIdentifier(SuitRepPolicy::decode(dec, _ctx)?),
+                    "conditions",
+                )?,
 
                 // Directives
-                18 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = directives.push(SuitDirective::Write(policy));
-                }
-                12 => {
-                    let idx = IndexArg::decode(dec, _ctx)?;
-                    let _ = directives.push(SuitDirective::SetComponentIndex(idx));
-                }
-                32 => {
-                    let seq = BstrSuitCommandSequence::decode(dec, _ctx)?;
-                    let _ = directives.push(SuitDirective::RunSequence(seq));
-                }
-                15 => {
-                    let arg = SuitDirectiveTryEachArgument::decode(dec, _ctx)?;
-                    let _ = directives.push(SuitDirective::TryEach(arg));
-                }
-                20 => {
-                    let params = SuitParameters::decode(dec, _ctx)?;
-                    let _ = directives.push(SuitDirective::OverrideParameters(params));
-                }
-                21 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = directives.push(SuitDirective::Fetch(policy));
-                }
-                22 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = directives.push(SuitDirective::Copy(policy));
-                }
-                31 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = directives.push(SuitDirective::Swap(policy));
-                }
-                23 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let _ = directives.push(SuitDirective::Invoke(policy));
-                }
+                18 => vec_push_or_error(
+                    &mut directives,
+                    SuitDirective::Write(SuitRepPolicy::decode(dec, _ctx)?),
+                    "directives",
+                )?,
+                12 => vec_push_or_error(
+                    &mut directives,
+                    SuitDirective::SetComponentIndex(IndexArg::decode(dec, _ctx)?),
+                    "directives",
+                )?,
+                32 => vec_push_or_error(
+                    &mut directives,
+                    SuitDirective::RunSequence(BstrSuitCommandSequence::decode(dec, _ctx)?),
+                    "directives",
+                )?,
+                15 => vec_push_or_error(
+                    &mut directives,
+                    SuitDirective::TryEach(SuitDirectiveTryEachArgument::decode(dec, _ctx)?),
+                    "directives",
+                )?,
+                20 => vec_push_or_error(
+                    &mut directives,
+                    SuitDirective::OverrideParameters(SuitParameters::decode(dec, _ctx)?),
+                    "directives",
+                )?,
+                21 => vec_push_or_error(
+                    &mut directives,
+                    SuitDirective::Fetch(SuitRepPolicy::decode(dec, _ctx)?),
+                    "directives",
+                )?,
+                22 => vec_push_or_error(
+                    &mut directives,
+                    SuitDirective::Copy(SuitRepPolicy::decode(dec, _ctx)?),
+                    "directives",
+                )?,
+                31 => vec_push_or_error(
+                    &mut directives,
+                    SuitDirective::Swap(SuitRepPolicy::decode(dec, _ctx)?),
+                    "directives",
+                )?,
+                23 => vec_push_or_error(
+                    &mut directives,
+                    SuitDirective::Invoke(SuitRepPolicy::decode(dec, _ctx)?),
+                    "directives",
+                )?,
 
                 // Custom commands (negative int keys)
-                other if other < 0 => {
-                    let v = CommandCustomValue::decode(dec, _ctx)?;
-                    let _ = customs.push(v);
-                }
+                other if other < 0 => vec_push_or_error(
+                    &mut customs,
+                    CommandCustomValue::decode(dec, _ctx)?,
+                    "customs",
+                )?,
 
                 _ => {
-                    #[cfg(any(feature = "defmt", feature = "std"))]
-                    error!("unknow SuitCommandSequence op id: {:?}", op);
-                    return Err(minicbor::decode::Error::message(
-                        "unknow SharedSequence op id",
-                    ));
+                    return Err(DecodeError::unknown_variant(op)
+                        .with_message("CommandSequence: unknown op id")
+                        .into());
                 }
             }
             Ok(())
@@ -500,11 +483,9 @@ impl<'a> SuitCommandSequence<'a> {
         if !conditions.is_empty() {
             handler.on_conditions(conditions)?;
         }
-
         if !directives.is_empty() {
             handler.on_directives(directives)?;
         }
-
         if !customs.is_empty() {
             handler.on_customs(customs)?;
         }
@@ -513,15 +494,15 @@ impl<'a> SuitCommandSequence<'a> {
 }
 
 /// Starting entry point to decode a SUIT structure and dispatch the decoded items to the handler.
-pub(crate) fn decode_and_dispatch<H>(buf: &[u8], handler: &mut H) -> Result<(), DecodeError>
+pub(crate) fn decode_and_dispatch<H>(buf: &[u8], handler: &mut H) -> Result<(), SuitError>
 where
     H: SuitStartHandler,
 {
     // on match ici sur le tag qui nous permet d'identifier la variante mais ca serait la meme chose avec des champs à type multiple.
     let mut d = Decoder::new(buf);
-    let tag = d.tag()?.as_u64();
+    let tag = d.tag()?;
     let ctx = &mut ();
-    match tag {
+    match tag.as_u64() {
         107 => {
             let envelope = d.decode_with(ctx)?;
             handler.on_envelope(envelope)
@@ -530,11 +511,9 @@ where
             let manifest = d.decode_with(ctx)?;
             handler.on_manifest(manifest)
         }
-        _ => {
-            #[cfg(any(feature = "defmt", feature = "std"))]
-            error!("SuitStart: unexpected tag: {:?}", tag);
-            Err(DecodeError::unknown_variant(tag as i64))
-        }
+        _ => Err(DecodeError::tag_mismatch(tag)
+            .with_message("SuitStart: unexpected tag (expected 107:envelope or 1070:manifest)")
+            .into()),
     }
 }
 
@@ -585,7 +564,7 @@ mod tests {
         fn on_conditions<'a>(
             &mut self,
             conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
-        ) -> Result<(), DecodeError> {
+        ) -> Result<(), SuitError> {
             for cond in conditions {
                 assert!(matches!(
                     cond,
@@ -604,7 +583,7 @@ mod tests {
         fn on_directives<'a>(
             &mut self,
             directives: Vec<SuitDirective<'a>, SUIT_MAX_ARRAY_LENGTH>,
-        ) -> Result<(), DecodeError> {
+        ) -> Result<(), SuitError> {
             for dir in directives {
                 assert!(matches!(
                     dir,
@@ -624,7 +603,7 @@ mod tests {
         fn on_customs<'a>(
             &mut self,
             customs: Vec<CommandCustomValue<'a>, SUIT_MAX_ARRAY_LENGTH>,
-        ) -> Result<(), DecodeError> {
+        ) -> Result<(), SuitError> {
             for cust in customs {
                 assert!(matches!(
                     cust,
