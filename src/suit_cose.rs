@@ -1,6 +1,3 @@
-#[cfg(any(feature = "std", feature = "defmt"))]
-use crate::suit_decode::type_to_str;
-
 use crate::suit_manifest::CborVec;
 use core::str;
 use minicbor::{
@@ -165,28 +162,15 @@ impl<'a, Ctx> Decode<'a, Ctx> for TstrOrInt<'a> {
     fn decode(d: &mut Decoder<'a>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
         let ty = d.datatype()?;
         match ty {
-            Type::String => Ok(TstrOrInt::Tstr(str::from_utf8(d.bytes()?).map_err(
-                |_e| {
-                    #[cfg(any(feature = "defmt", feature = "std"))]
-                    error!(
-                        "Utf8 error for CoseKey TstrOrInt at: {:?}",
-                        _e.valid_up_to()
-                    );
-                    DecodeError::message("Utf8 parsing error for TstrOrInt")
-                },
-            )?)),
+            Type::String => Ok(TstrOrInt::Tstr(
+                str::from_utf8(d.bytes()?)
+                    .map_err(|_e| DecodeError::message("Utf8 parsing error for TstrOrInt"))?,
+            )),
 
             Type::I32 => Ok(TstrOrInt::Int(i32::decode(d, _ctx)?)),
-            _ => {
-                #[cfg(any(feature = "defmt", feature = "std"))]
-                error!(
-                    "SuitAuthenticationBlock: unexpected type: {:?}",
-                    type_to_str(ty)
-                );
-                Err(minicbor::decode::Error::message(
-                    "unexpected type for SuitAuthenticationBlock",
-                ))
-            }
+            _ => Err(minicbor::decode::Error::message(
+                "unexpected type for SuitAuthenticationBlock",
+            )),
         }
     }
 }

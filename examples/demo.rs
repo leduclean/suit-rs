@@ -1,15 +1,11 @@
 #![no_std]
 
-use minicbor::decode::Error as DecodeError;
-use suit_rs::{
-    suit_decode,
-    suit_manifest::{SuitEnvelope, SuitManifest, *},
-};
+use suit_rs::{SuitError, suit_decode, suit_manifest::*};
 
 struct DemoHandler;
 
 impl SuitStartHandler for DemoHandler {
-    fn on_envelope<'a>(&mut self, envelope: SuitEnvelope<'a>) -> Result<(), DecodeError> {
+    fn on_envelope<'a>(&mut self, envelope: SuitEnvelope<'a>) -> Result<(), SuitError> {
         let manifest: SuitManifest = envelope.manifest.get()?;
         let common = manifest.common.get()?;
         let _shared_sequence = common.shared_seq.unwrap().get()?;
@@ -18,14 +14,14 @@ impl SuitStartHandler for DemoHandler {
         // Do something with validate_sequence
         Ok(())
     }
-    fn on_manifest<'a>(&mut self, _manifest: SuitManifest<'a>) -> Result<(), DecodeError> {
+    fn on_manifest<'a>(&mut self, _manifest: SuitManifest<'a>) -> Result<(), SuitError> {
         // Do something with the manifest
         Ok(())
     }
 }
 
 // ! Testing file, should be deleted, use TEST instead
-fn main() -> Result<(), DecodeError> {
+fn main() -> Result<(), SuitError> {
     // raw byte of examples from ietf suit manifest
     let _example1 = hex_literal::hex!(
         "d86ba2025873825824822f58201f2e7acca0dc2786f2fe4eb947f50873a6

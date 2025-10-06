@@ -2,40 +2,29 @@
 //! - SUIT_Shared_Sequence (flat: [ op, arg, op, arg, ... ])
 //! - SUIT_Command_Sequence (flat: [ op, arg, op, arg, ... ])
 //!
-#[cfg(any(feature = "std", feature = "defmt"))]
-use crate::suit_decode::type_to_str;
-
+use crate::errors::*;
 use minicbor::{Decoder, data::Type, decode::Error as DecodeError};
 
-pub fn decode_flat_pairs<'b, F>(d: &mut Decoder<'b>, mut f: F) -> Result<(), DecodeError>
+pub fn decode_flat_pairs<'b, F>(d: &mut Decoder<'b>, mut f: F) -> Result<(), SuitError>
 where
-    F: FnMut(i64, &mut Decoder<'b>) -> Result<(), DecodeError>,
+    F: FnMut(i64, &mut Decoder<'b>) -> Result<(), SuitError>,
 {
     // require top-level array
     let ty = d.datatype()?;
-    match ty {
-        Type::Array => {}
-        _ => {
-            #[cfg(any(feature = "defmt", feature = "std"))]
-            error!(
-                "expected top-level array for flat op/arg sequencebut got {:?}",
-                type_to_str(ty)
-            );
-            return Err(DecodeError::message(
-                "expected top-level array for flat op/arg sequence",
-            ));
-        }
+    if ty != Type::Array {
+        return Err(DecodeError::type_mismatch(ty)
+            .with_message("expected top-level array")
+            .into());
     }
+
     let arr_len = d.array()?; // consume array header
 
     if let Some(mut remaining) = arr_len {
         // definite-length array: must be an even number
         if remaining % 2 != 0 {
-            #[cfg(any(feature = "defmt", feature = "std"))]
-            error!("flat op/arg array length must be even");
-            return Err(DecodeError::message(
+            Err(DecodeError::message(
                 "flat op/arg array length must be even",
-            ));
+            ))?
         }
 
         while remaining > 0 {
@@ -63,7 +52,7 @@ where
 }
 
 // helper to read an op id (accept unsigned or negative int)
-fn read_op_id<'b>(d: &mut Decoder<'b>) -> Result<i64, DecodeError> {
+fn read_op_id<'b>(d: &mut Decoder<'b>) -> Result<i64, SuitError> {
     let ty = d.datatype()?;
     match ty {
         Type::U8 | Type::U16 | Type::U32 | Type::U64 => {
@@ -75,10 +64,8 @@ fn read_op_id<'b>(d: &mut Decoder<'b>) -> Result<i64, DecodeError> {
             let i = d.i64()?;
             Ok(i)
         }
-        _ => {
-            #[cfg(any(feature = "defmt", feature = "std"))]
-            error!("expected integer op id but got {:?}", type_to_str(ty));
-            Err(DecodeError::message("expected integer op id"))
-        }
+        _ => Err(DecodeError::type_mismatch(ty)
+            .with_message("expected integer op id")
+            .into()),
     }
 }

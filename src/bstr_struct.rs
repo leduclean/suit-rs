@@ -3,6 +3,8 @@ use minicbor::{
     Decode, Decoder, Encode, Encoder, decode::Error as DecodeError, encode::Error as EncodeError,
 };
 
+use crate::SuitError;
+
 ///  On decode, for `.bstr cbor` T, we store the bytes slice in BstrStruct **without** decoding inner T.
 ///
 ///
@@ -43,12 +45,12 @@ where
 
 /// Getter to decode inner T and to get it when needed
 impl<'a, T> BstrStruct<'a, T> {
-    pub fn get(&self) -> Result<T, DecodeError>
+    pub fn get(&self) -> Result<T, SuitError>
     where
         T: Decode<'a, ()>,
     {
         let mut decoder = Decoder::new(self.bytes);
-        T::decode(&mut decoder, &mut ())
+        T::decode(&mut decoder, &mut ()).map_err(|err| err.into())
     }
 }
 
