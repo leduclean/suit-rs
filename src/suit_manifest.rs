@@ -233,13 +233,23 @@ pub struct SuitCommon<'a> {
 }
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitComponents<'a>(
-    #[cbor(borrow)] pub CborVec<ComponentIdentifier<'a>, SUIT_MAX_INDEX_NUM>,
-); // += at least 1
+pub struct SuitComponents<'a>(#[cbor(borrow)] CborVec<ComponentIdentifier<'a>, SUIT_MAX_INDEX_NUM>); // += at least 1
+
+impl<'a> SuitComponents<'a> {
+    pub fn get(&self, index: usize) -> Option<&ComponentIdentifier<'a>> {
+        self.0.0.get(index)
+    }
+}
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct ComponentIdentifier<'a>(#[cbor(borrow)] pub CborVec<&'a ByteSlice, SUIT_MAX_INDEX_NUM>);
+pub struct ComponentIdentifier<'a>(#[cbor(borrow)] CborVec<&'a ByteSlice, SUIT_MAX_INDEX_NUM>);
+
+impl<'a> ComponentIdentifier<'a> {
+    pub fn get(&self, index: usize) -> Option<&'a [u8]> {
+        self.0.0.get(index).copied().map(|b| b.as_ref())
+    }
+}
 
 #[derive(Debug, Encode, Decode)]
 pub struct SuitSharedSequence<'a>(#[b(0)] pub RawInput<'a>); // + = at least 1
