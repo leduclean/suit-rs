@@ -1,7 +1,7 @@
 #![no_std]
 
+use suit_rs::handler::*;
 use suit_rs::{SuitError, suit_decode, suit_manifest::*};
-
 struct DemoHandler;
 
 impl SuitStartHandler for DemoHandler {

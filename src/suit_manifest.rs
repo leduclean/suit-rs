@@ -1,5 +1,5 @@
 use crate::suit_cose::*;
-use crate::{bstr_struct::BstrStruct, errors::SuitError};
+use crate::{bstr_struct::BstrStruct, errors::SuitError, raw_input::RawInput};
 use heapless::Vec;
 use minicbor::{
     Decode, Encode,
@@ -63,10 +63,6 @@ bstr_wrapper!(BstrSuitSharedSequence, SuitSharedSequence<'a>);
 #[derive(Debug)]
 pub struct CborVec<T, const N: usize>(pub Vec<T, N>);
 
-// Wrapping structure to decode and get the input directly
-#[derive(Debug)]
-pub(crate) struct RawInput<'a>(pub(crate) &'a [u8]);
-
 // Wrapping structure helper to show the inner cbor structure you are trying to decode
 // ! Make sure it doesn't exists anymore on release
 #[cfg(debug_assertions)]
@@ -74,10 +70,6 @@ pub(crate) struct RawInput<'a>(pub(crate) &'a [u8]);
 #[derive(Encode, Debug)]
 #[cbor(transparent)]
 pub struct Debug<T>(pub T);
-pub trait SuitStartHandler {
-    fn on_envelope<'a>(&mut self, envelope: SuitEnvelope<'a>) -> Result<(), SuitError>;
-    fn on_manifest<'a>(&mut self, manifest: SuitManifest<'a>) -> Result<(), SuitError>;
-}
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
@@ -258,17 +250,6 @@ impl<'a> ComponentIdentifier<'a> {
 #[derive(Debug, Encode, Decode)]
 pub struct SuitSharedSequence<'a>(#[b(0)] pub(crate) RawInput<'a>); // + = at least 1
 
-pub trait SuitSharedSequenceHandler {
-    fn on_conditions(
-        &mut self,
-        conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
-    ) -> Result<(), SuitError>;
-    fn on_commands<'a>(
-        &mut self,
-        commands: Vec<SuitSharedCommand<'a>, SUIT_MAX_ARRAY_LENGTH>,
-    ) -> Result<(), SuitError>;
-}
-
 #[derive(Debug, Encode, Decode)]
 pub enum SuitSharedCommand<'a> {
     #[n(12)]
@@ -306,21 +287,6 @@ pub struct SuitDirectiveTryEachArgumentShared<'a> {
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitCommandSequence<'a>(#[b(0)] pub(crate) RawInput<'a>);
-
-pub trait SuitCommandHandler {
-    fn on_conditions(
-        &mut self,
-        conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
-    ) -> Result<(), SuitError>;
-    fn on_directives<'a>(
-        &mut self,
-        directives: Vec<SuitDirective<'a>, SUIT_MAX_ARRAY_LENGTH>,
-    ) -> Result<(), SuitError>;
-    fn on_customs<'a>(
-        &mut self,
-        customs: Vec<CommandCustomValue<'a>, SUIT_MAX_ARRAY_LENGTH>,
-    ) -> Result<(), SuitError>;
-}
 
 #[derive(Debug, Encode)]
 pub enum CommandCustomValue<'a> {

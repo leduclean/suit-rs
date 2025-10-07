@@ -1,5 +1,6 @@
-pub use crate::errors::SuitError;
-use crate::flat_ops::decode_flat_pairs;
+use crate::errors::SuitError;
+use crate::handler::*;
+use crate::raw_input::*;
 use crate::suit_cose::*;
 use crate::suit_manifest::*;
 use core::str;
@@ -10,16 +11,6 @@ use minicbor::{
     data::Type,
     decode::{ArrayIterWithCtx, Error as DecodeError},
 };
-
-/// Helper to log if push failed in a heapless vec
-fn vec_push_or_error<T: core::fmt::Debug, const N: usize>(
-    vec: &mut heapless::Vec<T, N>,
-    item: T,
-    context: &'static str,
-) -> Result<(), SuitError> {
-    vec.push(item)
-        .map_err(|_| SuitError::vec_overflow(N).with_ctx(context))
-}
 
 #[cfg(all(feature = "alloc", feature = "defmt"))]
 use minicbor::display;
@@ -54,13 +45,6 @@ where
         }
 
         Ok(CborVec(vec))
-    }
-}
-
-// We only want the input bytes given to this decoder, doing so, we can treat it after, calling `decode_and_dispatch()`
-impl<'a, C> Decode<'a, C> for RawInput<'a> {
-    fn decode(d: &mut Decoder<'a>, _ctx: &mut C) -> Result<Self, DecodeError> {
-        Ok(RawInput(d.input()))
     }
 }
 
@@ -276,205 +260,33 @@ fn is_valid_tag38ltag(s: &str) -> bool {
 }
 
 impl<'a> SuitSharedSequence<'a> {
-    pub fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
+    #[allow(dead_code)]
+    fn decode_and_dispatch<H>(&mut self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitSharedSequenceHandler,
     {
-        let _ctx = &mut ();
-        let mut commands: Vec<SuitSharedCommand<'a>, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
-        let mut conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
-
-        let mut d = Decoder::new(self.0.0);
-        decode_flat_pairs(&mut d, |op, dec| {
-            match op {
-                // Commands
-                12 => {
-                    let idx = IndexArg::decode(dec, _ctx)?;
-                    vec_push_or_error(
-                        &mut commands,
-                        SuitSharedCommand::SetComponentIndex(idx),
-                        "commands",
-                    )?;
-                }
-                32 => {
-                    let seq = BstrSuitSharedSequence::decode(dec, _ctx)?;
-                    vec_push_or_error(
-                        &mut commands,
-                        SuitSharedCommand::RunSequence(seq),
-                        "commands",
-                    )?;
-                }
-                15 => {
-                    let arg = SuitDirectiveTryEachArgumentShared::decode(dec, _ctx)?;
-                    vec_push_or_error(&mut commands, SuitSharedCommand::TryEach(arg), "commands")?;
-                }
-                20 => {
-                    let params = SuitParameters::decode(dec, _ctx)?;
-                    vec_push_or_error(
-                        &mut commands,
-                        SuitSharedCommand::OverrideParameters(params),
-                        "commands",
-                    )?;
-                }
-
-                // Conditions
-                1 | 2 | 3 | 5 | 6 | 14 | 24 => {
-                    let policy = SuitRepPolicy::decode(dec, _ctx)?;
-                    let cond = match op {
-                        1 => SuitCondition::VendorIdentifier(policy),
-                        2 => SuitCondition::ClassIdentifier(policy),
-                        3 => SuitCondition::ImageMatch(policy),
-                        5 => SuitCondition::ComponentSlot(policy),
-                        6 => SuitCondition::CheckContent(policy),
-                        14 => SuitCondition::Abort(policy),
-                        24 => SuitCondition::DeviceIdentifier(policy),
-                        _ => unreachable!(),
-                    };
-                    vec_push_or_error(&mut conditions, cond, "conditions")?;
-                }
-
-                _ => {
-                    return Err(DecodeError::unknown_variant(op)
-                        .with_message("SharedSequence: unknown op id")
-                        .into());
-                }
-            }
-
-            Ok(())
-        })?;
-
-        if !conditions.is_empty() {
-            handler.on_conditions(conditions)?;
-        }
-        if !commands.is_empty() {
-            handler.on_commands(commands)?;
-        }
+        let pairs = self.0.collect_pairs()?;
+        let cond_iter = iter_conditions(&pairs);
+        let command_iter = iter_shared_command(&pairs);
+        handler.on_conditions(cond_iter)?;
+        handler.on_commands(command_iter)?;
         Ok(())
     }
 }
 
 impl<'a> SuitCommandSequence<'a> {
-    pub fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
+    #[allow(dead_code)]
+    fn decode_and_dispatch<H>(&mut self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitCommandHandler,
     {
-        let _ctx = &mut ();
-        let mut conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
-        let mut directives: Vec<SuitDirective, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
-        let mut customs: Vec<CommandCustomValue, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
-        let mut d = Decoder::new(self.0.0);
-
-        decode_flat_pairs(&mut d, |op, dec| {
-            match op {
-                // Conditions
-                1 => vec_push_or_error(
-                    &mut conditions,
-                    SuitCondition::VendorIdentifier(SuitRepPolicy::decode(dec, _ctx)?),
-                    "conditions",
-                )?,
-                2 => vec_push_or_error(
-                    &mut conditions,
-                    SuitCondition::ClassIdentifier(SuitRepPolicy::decode(dec, _ctx)?),
-                    "conditions",
-                )?,
-                3 => vec_push_or_error(
-                    &mut conditions,
-                    SuitCondition::ImageMatch(SuitRepPolicy::decode(dec, _ctx)?),
-                    "conditions",
-                )?,
-                5 => vec_push_or_error(
-                    &mut conditions,
-                    SuitCondition::ComponentSlot(SuitRepPolicy::decode(dec, _ctx)?),
-                    "conditions",
-                )?,
-                6 => vec_push_or_error(
-                    &mut conditions,
-                    SuitCondition::CheckContent(SuitRepPolicy::decode(dec, _ctx)?),
-                    "conditions",
-                )?,
-                14 => vec_push_or_error(
-                    &mut conditions,
-                    SuitCondition::Abort(SuitRepPolicy::decode(dec, _ctx)?),
-                    "conditions",
-                )?,
-                24 => vec_push_or_error(
-                    &mut conditions,
-                    SuitCondition::DeviceIdentifier(SuitRepPolicy::decode(dec, _ctx)?),
-                    "conditions",
-                )?,
-
-                // Directives
-                18 => vec_push_or_error(
-                    &mut directives,
-                    SuitDirective::Write(SuitRepPolicy::decode(dec, _ctx)?),
-                    "directives",
-                )?,
-                12 => vec_push_or_error(
-                    &mut directives,
-                    SuitDirective::SetComponentIndex(IndexArg::decode(dec, _ctx)?),
-                    "directives",
-                )?,
-                32 => vec_push_or_error(
-                    &mut directives,
-                    SuitDirective::RunSequence(BstrSuitCommandSequence::decode(dec, _ctx)?),
-                    "directives",
-                )?,
-                15 => vec_push_or_error(
-                    &mut directives,
-                    SuitDirective::TryEach(SuitDirectiveTryEachArgument::decode(dec, _ctx)?),
-                    "directives",
-                )?,
-                20 => vec_push_or_error(
-                    &mut directives,
-                    SuitDirective::OverrideParameters(SuitParameters::decode(dec, _ctx)?),
-                    "directives",
-                )?,
-                21 => vec_push_or_error(
-                    &mut directives,
-                    SuitDirective::Fetch(SuitRepPolicy::decode(dec, _ctx)?),
-                    "directives",
-                )?,
-                22 => vec_push_or_error(
-                    &mut directives,
-                    SuitDirective::Copy(SuitRepPolicy::decode(dec, _ctx)?),
-                    "directives",
-                )?,
-                31 => vec_push_or_error(
-                    &mut directives,
-                    SuitDirective::Swap(SuitRepPolicy::decode(dec, _ctx)?),
-                    "directives",
-                )?,
-                23 => vec_push_or_error(
-                    &mut directives,
-                    SuitDirective::Invoke(SuitRepPolicy::decode(dec, _ctx)?),
-                    "directives",
-                )?,
-
-                // Custom commands (negative int keys)
-                other if other < 0 => vec_push_or_error(
-                    &mut customs,
-                    CommandCustomValue::decode(dec, _ctx)?,
-                    "customs",
-                )?,
-
-                _ => {
-                    return Err(DecodeError::unknown_variant(op)
-                        .with_message("CommandSequence: unknown op id")
-                        .into());
-                }
-            }
-            Ok(())
-        })?;
-
-        if !conditions.is_empty() {
-            handler.on_conditions(conditions)?;
-        }
-        if !directives.is_empty() {
-            handler.on_directives(directives)?;
-        }
-        if !customs.is_empty() {
-            handler.on_customs(customs)?;
-        }
+        let pairs = self.0.collect_pairs()?;
+        let cond_iter = iter_conditions(&pairs);
+        let direct_iter = iter_directives(&pairs);
+        let custom_iter = iter_custom(&pairs);
+        handler.on_conditions(cond_iter)?;
+        handler.on_directives(direct_iter)?;
+        handler.on_customs(custom_iter)?;
         Ok(())
     }
 }
@@ -505,18 +317,20 @@ where
 
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
+    use crate::raw_input::*;
 
     #[allow(dead_code)]
     struct TestHandler;
 
     impl SuitSharedSequenceHandler for TestHandler {
-        fn on_conditions<'a>(
+        fn on_conditions(
             &mut self,
-            conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
+            conditions: impl Iterator<Item = Result<SuitCondition, SuitError>>,
         ) -> Result<(), SuitError> {
             for cond in conditions {
                 assert!(matches!(
-                    cond,
+                    cond.unwrap(),
                     SuitCondition::VendorIdentifier(_)
                         | SuitCondition::ClassIdentifier(_)
                         | SuitCondition::ImageMatch(_)
@@ -531,11 +345,11 @@ mod tests {
 
         fn on_commands<'a>(
             &mut self,
-            commands: Vec<SuitSharedCommand<'a>, SUIT_MAX_ARRAY_LENGTH>,
+            commands: impl Iterator<Item = Result<SuitSharedCommand<'a>, SuitError>>,
         ) -> Result<(), SuitError> {
             for cmd in commands {
                 assert!(matches!(
-                    cmd,
+                    cmd.unwrap(),
                     SuitSharedCommand::SetComponentIndex(_)
                         | SuitSharedCommand::RunSequence(_)
                         | SuitSharedCommand::TryEach(_)
@@ -549,11 +363,11 @@ mod tests {
     impl SuitCommandHandler for TestHandler {
         fn on_conditions<'a>(
             &mut self,
-            conditions: Vec<SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
+            conditions: impl Iterator<Item = Result<SuitCondition, SuitError>>,
         ) -> Result<(), SuitError> {
             for cond in conditions {
                 assert!(matches!(
-                    cond,
+                    cond.unwrap(),
                     SuitCondition::VendorIdentifier(_)
                         | SuitCondition::ClassIdentifier(_)
                         | SuitCondition::ImageMatch(_)
@@ -568,11 +382,11 @@ mod tests {
 
         fn on_directives<'a>(
             &mut self,
-            directives: Vec<SuitDirective<'a>, SUIT_MAX_ARRAY_LENGTH>,
+            directives: impl Iterator<Item = Result<SuitDirective<'a>, SuitError>>,
         ) -> Result<(), SuitError> {
             for dir in directives {
                 assert!(matches!(
-                    dir,
+                    dir.unwrap(),
                     SuitDirective::Write(_)
                         | SuitDirective::SetComponentIndex(_)
                         | SuitDirective::RunSequence(_)
@@ -588,11 +402,11 @@ mod tests {
         }
         fn on_customs<'a>(
             &mut self,
-            customs: Vec<CommandCustomValue<'a>, SUIT_MAX_ARRAY_LENGTH>,
+            customs: impl Iterator<Item = Result<CommandCustomValue<'a>, SuitError>>,
         ) -> Result<(), SuitError> {
             for cust in customs {
                 assert!(matches!(
-                    cust,
+                    cust.unwrap(),
                     CommandCustomValue::Bytes(_)
                         | CommandCustomValue::Text(_)
                         | CommandCustomValue::Integer(_)
@@ -636,7 +450,9 @@ h'0123456789abcdeffedcba987654321000112233445566778899aabbccddeeff'
                     }
                 ]"#
         );
-        let seq = SuitSharedSequence(RawInput(SUIT_SHARED_SEQUENCE.as_ref()));
+        let mut seq = SuitCommandSequence(
+            RawInput::decode(&mut Decoder::new(&SUIT_SHARED_SEQUENCE), &mut ()).unwrap(),
+        );
         let mut handler = TestHandler;
         seq.decode_and_dispatch(&mut handler).unwrap();
         assert!(seq.decode_and_dispatch(&mut handler).is_ok());
@@ -653,7 +469,9 @@ h'0123456789abcdeffedcba987654321000112233445566778899aabbccddeeff'
                 / condition-image-match / 3,15
             ] "#
         );
-        let seq = SuitCommandSequence(RawInput(SUIT_VALIDATE_COMMAND_SEQUENCE.as_ref()));
+        let mut seq = SuitCommandSequence(
+            RawInput::decode(&mut Decoder::new(&SUIT_VALIDATE_COMMAND_SEQUENCE), &mut ()).unwrap(),
+        );
         let mut handler = TestHandler;
         seq.decode_and_dispatch(&mut handler).unwrap();
     }

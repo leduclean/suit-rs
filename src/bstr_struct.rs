@@ -71,14 +71,17 @@ mod tests {
             ]"#
         );
         let mut d1 = Decoder::new(&LAZY_CBOR_COMMAND_SEQ);
-        let mut d2 = Decoder::new(&COMMAND_SEQ);
+        let mut d2: Decoder<'_> = Decoder::new(&COMMAND_SEQ);
 
         let lazy = BstrStruct::<SuitCommandSequence>::decode(&mut d1, &mut ()).unwrap();
         let seq = lazy.get().unwrap();
-
         assert_eq!(
-            seq.0.0,
-            SuitCommandSequence::decode(&mut d2, &mut ()).unwrap().0.0
+            seq.0.0.input(),
+            SuitCommandSequence::decode(&mut d2, &mut ())
+                .unwrap()
+                .0
+                .0
+                .input()
         )
     }
 }

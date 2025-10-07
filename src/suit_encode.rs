@@ -1,3 +1,4 @@
+use crate::raw_input::RawInput;
 use crate::suit_manifest::*;
 use minicbor::{Encode, Encoder, encode::Error as EncodeError};
 
