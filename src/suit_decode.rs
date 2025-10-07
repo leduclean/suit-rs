@@ -275,8 +275,7 @@ fn is_valid_tag38ltag(s: &str) -> bool {
 }
 
 impl<'a> SuitSharedSequence<'a> {
-    #[allow(dead_code)]
-    fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
+    pub fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitSharedSequenceHandler,
     {
@@ -354,8 +353,7 @@ impl<'a> SuitSharedSequence<'a> {
 }
 
 impl<'a> SuitCommandSequence<'a> {
-    #[allow(dead_code)]
-    fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
+    pub fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitCommandHandler,
     {

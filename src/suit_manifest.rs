@@ -332,7 +332,7 @@ pub enum CommandCustomValue<'a> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitRepPolicy(SuitReportingBits);
+pub struct SuitRepPolicy(pub SuitReportingBits);
 
 bitflags::bitflags! {
     #[derive(Debug)]
