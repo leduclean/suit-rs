@@ -24,13 +24,12 @@ impl<'b, C> Decode<'b, C> for FlatSequenceDecoder<'b> {
 }
 
 impl<'b> FlatSequenceDecoder<'b> {
-    pub fn collect_pairs(&mut self) -> Result<Vec<Pair<'b>, SUIT_MAX_ARRAY_LENGTH>, SuitError> {
-        let mut out: Vec<Pair<'b>, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
+    pub(crate) fn collect_pairs<const N: usize>(&mut self) -> Result<Vec<Pair<'b>, N>, SuitError> {
+        let mut out: Vec<Pair<'b>, N> = Vec::new();
         loop {
-            match self.read_next_two() {
+            match self.read_next_pair() {
                 Ok(Some(pair)) => {
-                    out.push(pair)
-                        .map_err(|_| SuitError::vec_overflow(SUIT_MAX_ARRAY_LENGTH))?;
+                    out.push(pair).map_err(|_| SuitError::out_of_space(N))?;
                 }
                 Ok(None) => break,
                 Err(e) => return Err(e),
@@ -39,7 +38,7 @@ impl<'b> FlatSequenceDecoder<'b> {
         Ok(out)
     }
     /// Read the next flat op/arg sequence and stock it into a `Pair`
-    fn read_next_two(&mut self) -> Result<Option<Pair<'b>>, SuitError> {
+    fn read_next_pair(&mut self) -> Result<Option<Pair<'b>>, SuitError> {
         let d = &mut self.0;
         match read_op_id(d)? {
             None => Ok(None),
@@ -186,6 +185,7 @@ impl<'b> Iterator for FlatSequenceIter<'b, CommandCustomValue<'b>> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Pair<'b> {
     op: i64,
     bytes: &'b [u8],
@@ -276,5 +276,140 @@ impl<'b> From<&Pair<'b>> for Result<CommandCustomValue<'b>, SuitError> {
     fn from(pair: &Pair<'b>) -> Self {
         let mut d = Decoder::new(pair.bytes);
         Ok(CommandCustomValue::decode(&mut d, &mut ())?)
+    }
+}
+
+mod tests {
+    use super::*;
+
+    #[allow(dead_code)]
+    const FLAT_SEQUENCE: cboritem::CborItem<'static> = cbor_macro::cbo!(
+        r#"[
+                / directive-override-parameters / 20,{
+                    / uri / 21:"http://example.com/file.bin"
+                },
+                / directive-fetch / 21,2,
+                / condition-image-match / 3,15
+            ]"#
+    );
+
+    #[allow(dead_code)]
+    fn get_test_flat_seq_decode(cbor_bytes: &'static [u8]) -> FlatSequenceDecoder<'static> {
+        let mut d = Decoder::new(cbor_bytes);
+        d.decode().unwrap()
+    }
+
+    #[test]
+    fn flat_sequence_decode() {
+        let mut main_d = Decoder::new(&FLAT_SEQUENCE);
+        let flat_sequence_decoder = main_d.decode::<FlatSequenceDecoder>().unwrap();
+        // We skip the array part in the main decoder and delegue it to sub decoder
+        // so after delegation, main should be at end of input
+        assert!(main_d.datatype().unwrap_err().is_end_of_input());
+        assert!(flat_sequence_decoder.0.datatype().unwrap() != Type::Array)
+    }
+
+    #[test]
+    fn decode_advances_main_decoder() {
+        let ci = cbor_macro::cbo!(r#"[ [1,2] ]"#);
+        let mut main = Decoder::new(&ci);
+        let _fsd = main.decode::<FlatSequenceDecoder>().unwrap();
+        assert!(main.datatype().unwrap_err().is_end_of_input());
+    }
+
+    #[test]
+    fn test_read_op() {
+        let mut decoder_on_op =
+            get_test_flat_seq_decode(&cbor_macro::cbo!(r#"[1, 2, ["not and int"]]"#)).0;
+        // we start decoding the array as FlatSequenceDecoder would do
+        assert_eq!(1, read_op_id(&mut decoder_on_op).unwrap().unwrap());
+        assert_eq!(2, read_op_id(&mut decoder_on_op).unwrap().unwrap());
+        assert!(read_op_id(&mut decoder_on_op).is_err_and(|e| e.is_decode_error()))
+    }
+
+    #[test]
+    fn test_read_next_two() {
+        let mut sequence = get_test_flat_seq_decode(&FLAT_SEQUENCE);
+        let firt_pair = sequence.read_next_pair().unwrap().unwrap();
+        let first_expected_pair = Pair {
+            op: 20,
+            bytes: &cbor_macro::cbo!(
+                r#"{
+                    / uri / 21:"http://example.com/file.bin"
+                }"#
+            ),
+        };
+
+        let second_pair = sequence.read_next_pair().unwrap().unwrap();
+        let second_expected_pair = Pair {
+            op: 21,
+            bytes: &[2u8],
+        };
+
+        let third_pair = sequence.read_next_pair().unwrap().unwrap();
+        let third_expected_pair = Pair {
+            op: 3,
+            bytes: &[15u8],
+        };
+        assert_eq!(first_expected_pair, firt_pair);
+        assert_eq!(second_expected_pair, second_pair);
+        assert_eq!(third_expected_pair, third_pair);
+
+        // No more item
+        assert!(sequence.read_next_pair().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_collect_pairs() {
+        let mut test_flat_seq = get_test_flat_seq_decode(&cbor_macro::cbo!(r#"[1,2,3,4]"#));
+        let collected = test_flat_seq.collect_pairs::<2>().unwrap();
+
+        assert_eq!(
+            Pair {
+                op: 1,
+                bytes: &[2u8]
+            },
+            collected[0]
+        );
+        assert_eq!(
+            Pair {
+                op: 3,
+                bytes: &[4u8]
+            },
+            collected[1]
+        );
+
+        let mut test_flat_seq = get_test_flat_seq_decode(&cbor_macro::cbo!(r#"[1,2,3,4]"#));
+        assert!(
+            test_flat_seq
+                .collect_pairs::<0>()
+                .is_err_and(|e| e.is_out_of_space())
+        );
+    }
+
+    #[test]
+    fn test_iterator_conditions_correctly() {
+        let ci = cbor_macro::cbo!(r#"[1, 15, 2, 15] "#);
+        let pairs = get_test_flat_seq_decode(&ci).collect_pairs::<4>().unwrap();
+        let mut cond_iter = iter_conditions(&pairs);
+        assert!(cond_iter.next().is_some());
+        assert!(cond_iter.next().is_some());
+        assert!(cond_iter.next().is_none());
+    }
+
+    #[test]
+    fn from_pair_unknown_op_errors() {
+        let p = Pair {
+            op: -10,
+            bytes: &[0u8],
+        };
+        let res: Result<SuitCondition, SuitError> = From::from(&p);
+        assert!(res.is_err_and(|e| e.is_unknown_op()));
+        let res: Result<SuitSharedCommand, SuitError> = From::from(&p);
+        assert!(res.is_err_and(|e| e.is_unknown_op()));
+        let res: Result<SuitDirective, SuitError> = From::from(&p);
+        assert!(res.is_err_and(|e| e.is_unknown_op()));
+        let res: Result<CommandCustomValue, SuitError> = From::from(&p);
+        assert!(res.is_ok_and(|res| matches!(res, CommandCustomValue::Integer(_))))
     }
 }

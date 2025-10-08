@@ -30,12 +30,24 @@ impl SuitError {
         self
     }
 
-    pub fn vec_overflow(capacity: usize) -> Self {
+    pub fn out_of_space(capacity: usize) -> Self {
         ErrorImpl::OutOfSpace(capacity).into()
     }
 
     pub fn unknown_op(op: i64) -> Self {
         ErrorImpl::UnknowOp(op).into()
+    }
+
+    pub fn is_decode_error(&self) -> bool {
+        matches!(self.source, ErrorImpl::DecodeError(_))
+    }
+
+    pub fn is_unknown_op(&self) -> bool {
+        matches!(self.source, ErrorImpl::UnknowOp(_))
+    }
+
+    pub fn is_out_of_space(&self) -> bool {
+        matches!(self.source, ErrorImpl::OutOfSpace(_))
     }
 }
 

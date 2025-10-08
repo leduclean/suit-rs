@@ -265,7 +265,7 @@ impl<'a> SuitSharedSequence<'a> {
     where
         H: SuitSharedSequenceHandler,
     {
-        let pairs = self.0.collect_pairs()?;
+        let pairs = self.0.collect_pairs::<SUIT_MAX_ARRAY_LENGTH>()?;
         let cond_iter = iter_conditions(&pairs);
         let command_iter = iter_shared_command(&pairs);
         handler.on_conditions(cond_iter)?;
@@ -280,7 +280,7 @@ impl<'a> SuitCommandSequence<'a> {
     where
         H: SuitCommandHandler,
     {
-        let pairs = self.0.collect_pairs()?;
+        let pairs = self.0.collect_pairs::<SUIT_MAX_ARRAY_LENGTH>()?;
         let cond_iter = iter_conditions(&pairs);
         let direct_iter = iter_directives(&pairs);
         let custom_iter = iter_custom(&pairs);
