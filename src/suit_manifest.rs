@@ -4,7 +4,6 @@ use heapless::Vec;
 use minicbor::{
     Decode, Encode,
     bytes::{ByteArray, ByteSlice},
-    decode::Error as DecodeError,
 };
 
 type Rfc4122Uuid = ByteArray<16>;
@@ -367,6 +366,19 @@ pub enum SuitCondition {
     #[n(24)]
     DeviceIdentifier(#[n(0)] SuitRepPolicy),
 }
+impl SuitCondition {
+    pub fn policy(&self) -> &SuitReportingBits {
+        match self {
+            SuitCondition::VendorIdentifier(SuitRepPolicy(p))
+            | SuitCondition::ClassIdentifier(SuitRepPolicy(p))
+            | SuitCondition::ImageMatch(SuitRepPolicy(p))
+            | SuitCondition::ComponentSlot(SuitRepPolicy(p))
+            | SuitCondition::CheckContent(SuitRepPolicy(p))
+            | SuitCondition::Abort(SuitRepPolicy(p))
+            | SuitCondition::DeviceIdentifier(SuitRepPolicy(p)) => p,
+        }
+    }
+}
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
@@ -400,6 +412,19 @@ pub enum SuitDirective<'a> {
 
     #[n(23)]
     Invoke(#[n(0)] SuitRepPolicy),
+}
+
+impl SuitDirective<'_> {
+    pub fn policy(&self) -> &SuitReportingBits {
+        match self {
+            SuitDirective::Write(SuitRepPolicy(p))
+            | SuitDirective::Fetch(SuitRepPolicy(p))
+            | SuitDirective::Copy(SuitRepPolicy(p))
+            | SuitDirective::Swap(SuitRepPolicy(p))
+            | SuitDirective::Invoke(SuitRepPolicy(p)) => p,
+            _ => panic!("Directive does not have a reporting policy"),
+        }
+    }
 }
 
 #[derive(Debug, Encode, Decode)]
