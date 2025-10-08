@@ -57,8 +57,8 @@ impl<'b> RawInput<'b> {
 }
 // helper to read an op id (accept unsigned or negative int)
 fn read_op_id<'b>(d: &mut Decoder<'b>) -> Result<Option<i64>, SuitError> {
-    if let Ok(ty) = d.datatype() {
-        match ty {
+    match d.datatype() {
+        Ok(ty) => match ty {
             Type::U8 | Type::U16 | Type::U32 | Type::U64 => {
                 let u = d.u64()?;
                 let i = i64::try_from(u).map_err(|_| DecodeError::message("op id too large"))?;
@@ -71,41 +71,40 @@ fn read_op_id<'b>(d: &mut Decoder<'b>) -> Result<Option<i64>, SuitError> {
             _ => Err(DecodeError::type_mismatch(ty)
                 .with_message("expected integer op  id")
                 .into()),
+        },
+        Err(e) => {
+            if e.is_end_of_input() {
+                Ok(None)
+            } else {
+                Err(e.into())
+            }
         }
-    } else {
-        // if datatype yield error, it's end of input so None
-        Ok(None)
     }
 }
 
 // Give a `SuitCondition` Iterable struct
-pub(crate) fn iter_conditions<'b>(
-    pairs: &'b Vec<Pair<'b>, SUIT_MAX_ARRAY_LENGTH>,
-) -> RawInputIter<'b, SuitCondition> {
+pub(crate) fn iter_conditions<'b>(pairs: &'b [Pair<'b>]) -> RawInputIter<'b, SuitCondition> {
     RawInputIter::new(pairs)
 }
 
 // Give a `SuitSharedCommand` Iterable struct
 pub(crate) fn iter_shared_command<'b>(
-    pairs: &'b Vec<Pair<'b>, SUIT_MAX_ARRAY_LENGTH>,
+    pairs: &'b [Pair<'b>],
 ) -> RawInputIter<'b, SuitSharedCommand<'b>> {
     RawInputIter::new(pairs)
 }
 
 // Give a `SuitSharedCommand` Iterable struct
-pub(crate) fn iter_directives<'b>(
-    pairs: &'b Vec<Pair<'b>, SUIT_MAX_ARRAY_LENGTH>,
-) -> RawInputIter<'b, SuitDirective<'b>> {
+pub(crate) fn iter_directives<'b>(pairs: &'b [Pair<'b>]) -> RawInputIter<'b, SuitDirective<'b>> {
     RawInputIter::new(pairs)
 }
 // Give a `CustomCommand` Iterable struct
-pub(crate) fn iter_custom<'b>(
-    pairs: &'b Vec<Pair<'b>, SUIT_MAX_ARRAY_LENGTH>,
-) -> RawInputIter<'b, CommandCustomValue<'b>> {
+pub(crate) fn iter_custom<'b>(pairs: &'b [Pair<'b>]) -> RawInputIter<'b, CommandCustomValue<'b>> {
     RawInputIter::new(pairs)
 }
 
 // Wrapper to be able to implement different iterator implementation depending on entry type
+#[derive(Debug)]
 pub struct RawInputIter<'b, T> {
     inner: &'b [Pair<'b>],
     idx: usize,
@@ -182,6 +181,7 @@ impl<'b> Iterator for RawInputIter<'b, CommandCustomValue<'b>> {
     }
 }
 
+#[derive(Debug)]
 pub struct Pair<'b> {
     op: i64,
     bytes: &'b [u8],
@@ -212,7 +212,7 @@ impl<'b> From<&Pair<'b>> for Result<SuitCondition, SuitError> {
             24 => Ok(SuitCondition::DeviceIdentifier(SuitRepPolicy::decode(
                 &mut dec, _ctx,
             )?)),
-            _ => unreachable!(),
+            _ => Err(SuitError::unknown_op(pair.op).with_ctx("SuitCondition")),
         }
     }
 }
@@ -234,7 +234,7 @@ impl<'b> From<&Pair<'b>> for Result<SuitSharedCommand<'b>, SuitError> {
             20 => Ok(SuitSharedCommand::OverrideParameters(
                 SuitParameters::decode(&mut dec, _ctx)?,
             )),
-            _ => unreachable!(),
+            _ => Err(SuitError::unknown_op(pair.op).with_ctx("SuitSharedCommand")),
         }
     }
 }
@@ -263,7 +263,7 @@ impl<'b> From<&Pair<'b>> for Result<SuitDirective<'b>, SuitError> {
             23 => Ok(SuitDirective::Invoke(SuitRepPolicy::decode(
                 &mut dec, _ctx,
             )?)),
-            _ => unreachable!(),
+            _ => Err(SuitError::unknown_op(pair.op).with_ctx("SuitDirective")),
         }
     }
 }

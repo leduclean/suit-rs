@@ -17,6 +17,8 @@ enum ErrorImpl {
     Utf8(#[from] Utf8Error),
     #[error("Vec overflow, capacity was {0}")]
     OutOfSpace(usize),
+    #[error("Unknow op: {0}")]
+    UnknowOp(i64),
     #[error("Default Error")]
     #[default]
     Default,
@@ -29,10 +31,11 @@ impl SuitError {
     }
 
     pub fn vec_overflow(capacity: usize) -> Self {
-        SuitError {
-            source: ErrorImpl::OutOfSpace(capacity),
-            ..Default::default()
-        }
+        ErrorImpl::OutOfSpace(capacity).into()
+    }
+
+    pub fn unknown_op(op: i64) -> Self {
+        ErrorImpl::UnknowOp(op).into()
     }
 }
 
