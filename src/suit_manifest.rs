@@ -1,5 +1,5 @@
 use crate::suit_cose::*;
-use crate::{bstr_struct::BstrStruct, errors::SuitError, raw_input::RawInput};
+use crate::{bstr_struct::BstrStruct, errors::SuitError, flat_seq_decode::FlatSequenceDecoder};
 use heapless::Vec;
 use minicbor::{
     Decode, Encode,
@@ -248,7 +248,7 @@ impl<'a> ComponentIdentifier<'a> {
 }
 
 #[derive(Debug, Encode, Decode)]
-pub struct SuitSharedSequence<'a>(#[b(0)] pub(crate) RawInput<'a>); // + = at least 1
+pub struct SuitSharedSequence<'a>(#[b(0)] pub FlatSequenceDecoder<'a>); // + = at least 1
 
 #[derive(Debug, Encode, Decode)]
 pub enum SuitSharedCommand<'a> {
@@ -286,7 +286,7 @@ pub struct SuitDirectiveTryEachArgumentShared<'a> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitCommandSequence<'a>(#[b(0)] pub(crate) RawInput<'a>);
+pub struct SuitCommandSequence<'a>(#[b(0)] pub FlatSequenceDecoder<'a>);
 
 #[derive(Debug, Encode)]
 pub enum CommandCustomValue<'a> {

@@ -8,10 +8,10 @@ use minicbor::{Decode, Decoder, data::Type, decode::Error as DecodeError};
 
 // Wrapping structure around the inner flat array content decoder
 #[derive(Debug)]
-pub struct RawInput<'b>(pub Decoder<'b>);
+pub struct FlatSequenceDecoder<'b>(pub Decoder<'b>);
 
 /// We only want the input bytes given to this decoder, doing so, we can treat it when we want with `decode_and_dispatch()`
-impl<'b, C> Decode<'b, C> for RawInput<'b> {
+impl<'b, C> Decode<'b, C> for FlatSequenceDecoder<'b> {
     fn decode(d: &mut Decoder<'b>, _ctx: &mut C) -> Result<Self, DecodeError> {
         // We clone the main decoder to keep a decoding context
         let mut inner = d.clone();
@@ -19,11 +19,11 @@ impl<'b, C> Decode<'b, C> for RawInput<'b> {
         d.skip()?;
         // consume the array header in the incoming decoder
         inner.array()?;
-        Ok(RawInput(inner))
+        Ok(FlatSequenceDecoder(inner))
     }
 }
 
-impl<'b> RawInput<'b> {
+impl<'b> FlatSequenceDecoder<'b> {
     pub fn collect_pairs(&mut self) -> Result<Vec<Pair<'b>, SUIT_MAX_ARRAY_LENGTH>, SuitError> {
         let mut out: Vec<Pair<'b>, SUIT_MAX_ARRAY_LENGTH> = Vec::new();
         loop {
@@ -83,35 +83,39 @@ fn read_op_id<'b>(d: &mut Decoder<'b>) -> Result<Option<i64>, SuitError> {
 }
 
 // Give a `SuitCondition` Iterable struct
-pub(crate) fn iter_conditions<'b>(pairs: &'b [Pair<'b>]) -> RawInputIter<'b, SuitCondition> {
-    RawInputIter::new(pairs)
+pub(crate) fn iter_conditions<'b>(pairs: &'b [Pair<'b>]) -> FlatSequenceIter<'b, SuitCondition> {
+    FlatSequenceIter::new(pairs)
 }
 
 // Give a `SuitSharedCommand` Iterable struct
 pub(crate) fn iter_shared_command<'b>(
     pairs: &'b [Pair<'b>],
-) -> RawInputIter<'b, SuitSharedCommand<'b>> {
-    RawInputIter::new(pairs)
+) -> FlatSequenceIter<'b, SuitSharedCommand<'b>> {
+    FlatSequenceIter::new(pairs)
 }
 
 // Give a `SuitSharedCommand` Iterable struct
-pub(crate) fn iter_directives<'b>(pairs: &'b [Pair<'b>]) -> RawInputIter<'b, SuitDirective<'b>> {
-    RawInputIter::new(pairs)
+pub(crate) fn iter_directives<'b>(
+    pairs: &'b [Pair<'b>],
+) -> FlatSequenceIter<'b, SuitDirective<'b>> {
+    FlatSequenceIter::new(pairs)
 }
 // Give a `CustomCommand` Iterable struct
-pub(crate) fn iter_custom<'b>(pairs: &'b [Pair<'b>]) -> RawInputIter<'b, CommandCustomValue<'b>> {
-    RawInputIter::new(pairs)
+pub(crate) fn iter_custom<'b>(
+    pairs: &'b [Pair<'b>],
+) -> FlatSequenceIter<'b, CommandCustomValue<'b>> {
+    FlatSequenceIter::new(pairs)
 }
 
 // Wrapper to be able to implement different iterator implementation depending on entry type
 #[derive(Debug)]
-pub struct RawInputIter<'b, T> {
+pub struct FlatSequenceIter<'b, T> {
     inner: &'b [Pair<'b>],
     idx: usize,
     _marker: core::marker::PhantomData<T>,
 }
 
-impl<'b, T> RawInputIter<'b, T> {
+impl<'b, T> FlatSequenceIter<'b, T> {
     pub fn new(slice: &'b [Pair<'b>]) -> Self {
         Self {
             inner: slice,
@@ -121,7 +125,7 @@ impl<'b, T> RawInputIter<'b, T> {
     }
 }
 
-impl<'b> Iterator for RawInputIter<'b, SuitCondition> {
+impl<'b> Iterator for FlatSequenceIter<'b, SuitCondition> {
     type Item = Result<SuitCondition, SuitError>;
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.inner.len() {
@@ -136,7 +140,7 @@ impl<'b> Iterator for RawInputIter<'b, SuitCondition> {
     }
 }
 
-impl<'b> Iterator for RawInputIter<'b, SuitDirective<'b>> {
+impl<'b> Iterator for FlatSequenceIter<'b, SuitDirective<'b>> {
     type Item = Result<SuitDirective<'b>, SuitError>;
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.inner.len() {
@@ -151,7 +155,7 @@ impl<'b> Iterator for RawInputIter<'b, SuitDirective<'b>> {
     }
 }
 
-impl<'b> Iterator for RawInputIter<'b, SuitSharedCommand<'b>> {
+impl<'b> Iterator for FlatSequenceIter<'b, SuitSharedCommand<'b>> {
     type Item = Result<SuitSharedCommand<'b>, SuitError>;
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.inner.len() {
@@ -166,7 +170,7 @@ impl<'b> Iterator for RawInputIter<'b, SuitSharedCommand<'b>> {
     }
 }
 
-impl<'b> Iterator for RawInputIter<'b, CommandCustomValue<'b>> {
+impl<'b> Iterator for FlatSequenceIter<'b, CommandCustomValue<'b>> {
     type Item = Result<CommandCustomValue<'b>, SuitError>;
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.inner.len() {

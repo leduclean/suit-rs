@@ -1,4 +1,4 @@
-use crate::raw_input::RawInput;
+use crate::flat_seq_decode::FlatSequenceDecoder;
 use crate::suit_manifest::*;
 use minicbor::{Encode, Encoder, encode::Error as EncodeError};
 
@@ -30,7 +30,7 @@ where
     }
 }
 
-impl<'a, C> Encode<C> for RawInput<'a> {
+impl<'a, C> Encode<C> for FlatSequenceDecoder<'a> {
     fn encode<W: minicbor::encode::Write>(
         &self,
         _e: &mut minicbor::Encoder<W>,

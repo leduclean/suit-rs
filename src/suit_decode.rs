@@ -1,6 +1,6 @@
 use crate::errors::SuitError;
+use crate::flat_seq_decode::*;
 use crate::handler::*;
-use crate::raw_input::*;
 use crate::suit_cose::*;
 use crate::suit_manifest::*;
 use core::str;
@@ -318,7 +318,7 @@ where
 mod tests {
     use super::*;
     #[allow(unused_imports)]
-    use crate::raw_input::*;
+    use crate::flat_seq_decode::*;
 
     #[allow(dead_code)]
     struct TestHandler;
@@ -451,7 +451,7 @@ h'0123456789abcdeffedcba987654321000112233445566778899aabbccddeeff'
                 ]"#
         );
         let mut seq = SuitCommandSequence(
-            RawInput::decode(&mut Decoder::new(&SUIT_SHARED_SEQUENCE), &mut ()).unwrap(),
+            FlatSequenceDecoder::decode(&mut Decoder::new(&SUIT_SHARED_SEQUENCE), &mut ()).unwrap(),
         );
         let mut handler = TestHandler;
         seq.decode_and_dispatch(&mut handler).unwrap();
@@ -470,7 +470,11 @@ h'0123456789abcdeffedcba987654321000112233445566778899aabbccddeeff'
             ] "#
         );
         let mut seq = SuitCommandSequence(
-            RawInput::decode(&mut Decoder::new(&SUIT_VALIDATE_COMMAND_SEQUENCE), &mut ()).unwrap(),
+            FlatSequenceDecoder::decode(
+                &mut Decoder::new(&SUIT_VALIDATE_COMMAND_SEQUENCE),
+                &mut (),
+            )
+            .unwrap(),
         );
         let mut handler = TestHandler;
         seq.decode_and_dispatch(&mut handler).unwrap();
