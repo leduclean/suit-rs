@@ -134,7 +134,12 @@ pub struct SuitDigest<'a> {
     #[n(0)]
     pub algorithm_id: SuitAlgorithmId,
     #[n(1)]
-    pub bytes: &'a ByteSlice,
+    bytes: &'a ByteSlice,
+}
+impl SuitDigest<'_> {
+    pub fn bytes(&self) -> &[u8] {
+        self.bytes.as_ref()
+    }
 }
 #[derive(Debug, Encode, Decode)]
 #[cbor(index_only)]
@@ -438,9 +443,9 @@ pub struct SuitDirectiveTryEachArgument<'a>(
 pub struct SuitParameters<'a> {
     #[n(1)]
     #[cbor(decode_with = "crate::suit_decode::decode_uuid_or_cborpen")]
-    pub vendor_identifier: Option<&'a ByteSlice>, // Rfc4122Uuid / cbor-pen
+    vendor_identifier: Option<&'a ByteSlice>, // Rfc4122Uuid / cbor-pen
     #[n(2)]
-    pub class_identifier: Option<Rfc4122Uuid>,
+    class_identifier: Option<Rfc4122Uuid>,
     #[b(3)] // We borrow the bstr
     pub image_digest: Option<BstrSuitDigest<'a>>,
     #[n(5)]
@@ -464,6 +469,15 @@ pub struct SuitParameters<'a> {
     #[n(25)]
     pub fetch_args: Option<&'a ByteSlice>,
     // custom: Option<CustomParameterValue,
+}
+
+impl SuitParameters<'_> {
+    pub fn vendor_identifier(&self) -> Option<&[u8]> {
+        self.vendor_identifier.map(|b| b.as_ref())
+    }
+    pub fn class_identifier(&self) -> Option<&[u8; 16]> {
+        self.class_identifier.as_ref().map(|b| b.as_ref())
+    }
 }
 
 // #[derive(Debug, Clone, Encode, Decode)]
