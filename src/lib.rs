@@ -11,7 +11,7 @@ mod suit_debug_log;
 
 mod bstr_struct;
 mod errors;
-mod flat_seq_decode;
+mod flat_seq;
 mod suit_cose;
 mod suit_decode;
 mod suit_encode;

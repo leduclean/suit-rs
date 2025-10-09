@@ -1,5 +1,5 @@
 use crate::errors::SuitError;
-use crate::flat_seq_decode::*;
+use crate::flat_seq::*;
 use crate::handler::*;
 use crate::suit_cose::*;
 use crate::suit_manifest::*;
@@ -260,8 +260,7 @@ fn is_valid_tag38ltag(s: &str) -> bool {
 }
 
 impl<'a> SuitSharedSequence<'a> {
-    #[allow(dead_code)]
-    fn decode_and_dispatch<H>(&mut self, handler: &mut H) -> Result<(), SuitError>
+    pub fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitSharedSequenceHandler,
     {
@@ -275,8 +274,7 @@ impl<'a> SuitSharedSequence<'a> {
 }
 
 impl<'a> SuitCommandSequence<'a> {
-    #[allow(dead_code)]
-    fn decode_and_dispatch<H>(&mut self, handler: &mut H) -> Result<(), SuitError>
+    pub fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitCommandHandler,
     {
@@ -318,19 +316,19 @@ where
 mod tests {
     use super::*;
     #[allow(unused_imports)]
-    use crate::flat_seq_decode::*;
+    use crate::flat_seq::*;
 
     #[allow(dead_code)]
     struct TestHandler;
 
     impl SuitSharedSequenceHandler for TestHandler {
-        fn on_conditions(
+        fn on_conditions<'a>(
             &mut self,
-            conditions: impl Iterator<Item = Result<SuitCondition, SuitError>>,
+            conditions: impl Iterator<Item = PairView<'a, SuitCondition>>,
         ) -> Result<(), SuitError> {
             for cond in conditions {
                 assert!(matches!(
-                    cond.unwrap(),
+                    cond.get().unwrap(),
                     SuitCondition::VendorIdentifier(_)
                         | SuitCondition::ClassIdentifier(_)
                         | SuitCondition::ImageMatch(_)
@@ -345,11 +343,11 @@ mod tests {
 
         fn on_commands<'a>(
             &mut self,
-            commands: impl Iterator<Item = Result<SuitSharedCommand<'a>, SuitError>>,
+            commands: impl Iterator<Item = PairView<'a, SuitSharedCommand<'a>>>,
         ) -> Result<(), SuitError> {
             for cmd in commands {
                 assert!(matches!(
-                    cmd.unwrap(),
+                    cmd.get().unwrap(),
                     SuitSharedCommand::SetComponentIndex(_)
                         | SuitSharedCommand::RunSequence(_)
                         | SuitSharedCommand::TryEach(_)
@@ -363,11 +361,11 @@ mod tests {
     impl SuitCommandHandler for TestHandler {
         fn on_conditions<'a>(
             &mut self,
-            conditions: impl Iterator<Item = Result<SuitCondition, SuitError>>,
+            conditions: impl Iterator<Item = PairView<'a, SuitCondition>>,
         ) -> Result<(), SuitError> {
             for cond in conditions {
                 assert!(matches!(
-                    cond.unwrap(),
+                    cond.get().unwrap(),
                     SuitCondition::VendorIdentifier(_)
                         | SuitCondition::ClassIdentifier(_)
                         | SuitCondition::ImageMatch(_)
@@ -382,11 +380,11 @@ mod tests {
 
         fn on_directives<'a>(
             &mut self,
-            directives: impl Iterator<Item = Result<SuitDirective<'a>, SuitError>>,
+            directives: impl Iterator<Item = PairView<'a, SuitDirective<'a>>>,
         ) -> Result<(), SuitError> {
             for dir in directives {
                 assert!(matches!(
-                    dir.unwrap(),
+                    dir.get().unwrap(),
                     SuitDirective::Write(_)
                         | SuitDirective::SetComponentIndex(_)
                         | SuitDirective::RunSequence(_)
@@ -402,11 +400,11 @@ mod tests {
         }
         fn on_customs<'a>(
             &mut self,
-            customs: impl Iterator<Item = Result<CommandCustomValue<'a>, SuitError>>,
+            customs: impl Iterator<Item = PairView<'a, CommandCustomValue<'a>>>,
         ) -> Result<(), SuitError> {
             for cust in customs {
                 assert!(matches!(
-                    cust.unwrap(),
+                    cust.get().unwrap(),
                     CommandCustomValue::Bytes(_)
                         | CommandCustomValue::Text(_)
                         | CommandCustomValue::Integer(_)
@@ -450,8 +448,8 @@ h'0123456789abcdeffedcba987654321000112233445566778899aabbccddeeff'
                     }
                 ]"#
         );
-        let mut seq = SuitCommandSequence(
-            FlatSequenceDecoder::decode(&mut Decoder::new(&SUIT_SHARED_SEQUENCE), &mut ()).unwrap(),
+        let seq = SuitCommandSequence(
+            FlatSequence::decode(&mut Decoder::new(&SUIT_SHARED_SEQUENCE), &mut ()).unwrap(),
         );
         let mut handler = TestHandler;
         seq.decode_and_dispatch(&mut handler).unwrap();
@@ -469,12 +467,9 @@ h'0123456789abcdeffedcba987654321000112233445566778899aabbccddeeff'
                 / condition-image-match / 3,15
             ] "#
         );
-        let mut seq = SuitCommandSequence(
-            FlatSequenceDecoder::decode(
-                &mut Decoder::new(&SUIT_VALIDATE_COMMAND_SEQUENCE),
-                &mut (),
-            )
-            .unwrap(),
+        let seq = SuitCommandSequence(
+            FlatSequence::decode(&mut Decoder::new(&SUIT_VALIDATE_COMMAND_SEQUENCE), &mut ())
+                .unwrap(),
         );
         let mut handler = TestHandler;
         seq.decode_and_dispatch(&mut handler).unwrap();

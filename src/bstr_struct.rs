@@ -76,12 +76,8 @@ mod tests {
         let lazy = BstrStruct::<SuitCommandSequence>::decode(&mut d1, &mut ()).unwrap();
         let seq = lazy.get().unwrap();
         assert_eq!(
-            seq.0.0.input(),
-            SuitCommandSequence::decode(&mut d2, &mut ())
-                .unwrap()
-                .0
-                .0
-                .input()
+            seq.0.0,
+            SuitCommandSequence::decode(&mut d2, &mut ()).unwrap().0.0
         )
     }
 }

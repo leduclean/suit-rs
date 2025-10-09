@@ -1,4 +1,5 @@
 use crate::SuitError;
+pub use crate::flat_seq::PairView;
 use crate::suit_manifest::*;
 
 pub trait SuitStartHandler {
@@ -7,27 +8,27 @@ pub trait SuitStartHandler {
 }
 
 pub trait SuitCommandHandler {
-    fn on_conditions(
+    fn on_conditions<'a>(
         &mut self,
-        conditions: impl Iterator<Item = Result<SuitCondition, SuitError>>,
+        conditions: impl Iterator<Item = PairView<'a, SuitCondition>>,
     ) -> Result<(), SuitError>;
     fn on_directives<'a>(
         &mut self,
-        directives: impl Iterator<Item = Result<SuitDirective<'a>, SuitError>>,
+        directives: impl Iterator<Item = PairView<'a, SuitDirective<'a>>>,
     ) -> Result<(), SuitError>;
     fn on_customs<'a>(
         &mut self,
-        customs: impl Iterator<Item = Result<CommandCustomValue<'a>, SuitError>>,
+        customs: impl Iterator<Item = PairView<'a, CommandCustomValue<'a>>>,
     ) -> Result<(), SuitError>;
 }
 
 pub trait SuitSharedSequenceHandler {
-    fn on_conditions(
+    fn on_conditions<'a>(
         &mut self,
-        conditions: impl Iterator<Item = Result<SuitCondition, SuitError>>,
+        conditions: impl Iterator<Item = PairView<'a, SuitCondition>>,
     ) -> Result<(), SuitError>;
     fn on_commands<'a>(
         &mut self,
-        commands: impl Iterator<Item = Result<SuitSharedCommand<'a>, SuitError>>,
+        commands: impl Iterator<Item = PairView<'a, SuitSharedCommand<'a>>>,
     ) -> Result<(), SuitError>;
 }
