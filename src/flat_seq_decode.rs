@@ -296,7 +296,7 @@ mod tests {
     #[allow(dead_code)]
     fn get_test_flat_seq_decode(cbor_bytes: &'static [u8]) -> FlatSequenceDecoder<'static> {
         let mut d = Decoder::new(cbor_bytes);
-        d.decode().unwrap()
+        d.decode().expect("Cbor provided is not an array")
     }
 
     #[test]
@@ -305,16 +305,33 @@ mod tests {
         let flat_sequence_decoder = main_d.decode::<FlatSequenceDecoder>().unwrap();
         // We skip the array part in the main decoder and delegue it to sub decoder
         // so after delegation, main should be at end of input
-        assert!(main_d.datatype().unwrap_err().is_end_of_input());
-        assert!(flat_sequence_decoder.0.datatype().unwrap() != Type::Array)
+        assert!(
+            main_d
+                .datatype()
+                .expect_err("Should be an error")
+                .is_end_of_input()
+        );
+        assert!(
+            flat_sequence_decoder
+                .0
+                .datatype()
+                .expect("Type should be valid")
+                != Type::Array
+        )
     }
 
     #[test]
     fn decode_advances_main_decoder() {
         let ci = cbor_macro::cbo!(r#"[ [1,2] ]"#);
         let mut main = Decoder::new(&ci);
-        let _fsd = main.decode::<FlatSequenceDecoder>().unwrap();
-        assert!(main.datatype().unwrap_err().is_end_of_input());
+        let _fsd = main
+            .decode::<FlatSequenceDecoder>()
+            .expect("Expected top level array");
+        assert!(
+            main.datatype()
+                .expect_err("Expected an Error")
+                .is_end_of_input()
+        );
     }
 
     #[test]
@@ -322,15 +339,25 @@ mod tests {
         let mut decoder_on_op =
             get_test_flat_seq_decode(&cbor_macro::cbo!(r#"[1, 2, ["not and int"]]"#)).0;
         // we start decoding the array as FlatSequenceDecoder would do
-        assert_eq!(1, read_op_id(&mut decoder_on_op).unwrap().unwrap());
-        assert_eq!(2, read_op_id(&mut decoder_on_op).unwrap().unwrap());
+        assert_eq!(
+            1,
+            read_op_id(&mut decoder_on_op)
+                .unwrap()
+                .expect("Missing op id")
+        );
+        assert_eq!(
+            2,
+            read_op_id(&mut decoder_on_op)
+                .unwrap()
+                .expect("Missing op id")
+        );
         assert!(read_op_id(&mut decoder_on_op).is_err_and(|e| e.is_decode_error()))
     }
 
     #[test]
     fn test_read_next_two() {
         let mut sequence = get_test_flat_seq_decode(&FLAT_SEQUENCE);
-        let firt_pair = sequence.read_next_pair().unwrap().unwrap();
+        let firt_pair = sequence.read_next_pair().unwrap().expect("Missing pair");
         let first_expected_pair = Pair {
             op: 20,
             bytes: &cbor_macro::cbo!(
@@ -340,13 +367,13 @@ mod tests {
             ),
         };
 
-        let second_pair = sequence.read_next_pair().unwrap().unwrap();
+        let second_pair = sequence.read_next_pair().unwrap().expect("Missing pair");
         let second_expected_pair = Pair {
             op: 21,
             bytes: &[2u8],
         };
 
-        let third_pair = sequence.read_next_pair().unwrap().unwrap();
+        let third_pair = sequence.read_next_pair().unwrap().expect("Missing Pair");
         let third_expected_pair = Pair {
             op: 3,
             bytes: &[15u8],
@@ -403,13 +430,13 @@ mod tests {
             op: -10,
             bytes: &[0u8],
         };
-        let res: Result<SuitCondition, SuitError> = From::from(&p);
-        assert!(res.is_err_and(|e| e.is_unknown_op()));
-        let res: Result<SuitSharedCommand, SuitError> = From::from(&p);
-        assert!(res.is_err_and(|e| e.is_unknown_op()));
-        let res: Result<SuitDirective, SuitError> = From::from(&p);
-        assert!(res.is_err_and(|e| e.is_unknown_op()));
-        let res: Result<CommandCustomValue, SuitError> = From::from(&p);
-        assert!(res.is_ok_and(|res| matches!(res, CommandCustomValue::Integer(_))))
+
+        assert!(<Result<SuitCondition, SuitError>>::from(&p).is_err_and(|e| e.is_unknown_op()));
+        assert!(<Result<SuitSharedCommand, SuitError>>::from(&p).is_err_and(|e| e.is_unknown_op()));
+        assert!(<Result<SuitDirective, SuitError>>::from(&p).is_err_and(|e| e.is_unknown_op()));
+        assert!(
+            <Result<CommandCustomValue, SuitError>>::from(&p)
+                .is_ok_and(|res| matches!(res, CommandCustomValue::Integer(_)))
+        );
     }
 }

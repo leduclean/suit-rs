@@ -71,7 +71,7 @@ mod tests {
             ]"#
         );
         let mut d1 = Decoder::new(&LAZY_CBOR_COMMAND_SEQ);
-        let mut d2: Decoder<'_> = Decoder::new(&COMMAND_SEQ);
+        let mut d2 = Decoder::new(&COMMAND_SEQ);
 
         let lazy = BstrStruct::<SuitCommandSequence>::decode(&mut d1, &mut ()).unwrap();
         let seq = lazy.get().unwrap();
