@@ -17,6 +17,7 @@ defmt = ["dep:defmt"]
 rusty-hook = "^0.11.2"
 [dependencies]
 bitflags = { version = "2.9.4", default-features = false, features = ["serde"] }
+cbor-diag = "0.1.12"
 cbor-macro = { version = "0.1.0", default-features = false }
 cboritem = { version = "0.1.3", default-features = false }
 defmt = { version = "1.0.1", optional = true }

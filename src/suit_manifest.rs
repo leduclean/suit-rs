@@ -4,7 +4,6 @@ use heapless::Vec;
 use minicbor::{
     Decode, Encode,
     bytes::{ByteArray, ByteSlice},
-    decode::Error as DecodeError,
 };
 
 type Rfc4122Uuid = ByteArray<16>;
@@ -66,7 +65,7 @@ pub struct CborVec<T, const N: usize>(pub Vec<T, N>);
 
 // Wrapping structure to decode and get the input directly
 #[derive(Debug)]
-pub struct RawInput<'a>(pub &'a [u8]);
+pub(crate) struct RawInput<'a>(pub(crate) &'a [u8]);
 
 // Wrapping structure helper to show the inner cbor structure you are trying to decode
 // ! Make sure it doesn't exists anymore on release
@@ -135,7 +134,12 @@ pub struct SuitDigest<'a> {
     #[n(0)]
     pub algorithm_id: SuitAlgorithmId,
     #[n(1)]
-    pub bytes: &'a ByteSlice,
+    bytes: &'a ByteSlice,
+}
+impl SuitDigest<'_> {
+    pub fn bytes(&self) -> &[u8] {
+        self.bytes.as_ref()
+    }
 }
 #[derive(Debug, Encode, Decode)]
 #[cbor(index_only)]
@@ -233,16 +237,26 @@ pub struct SuitCommon<'a> {
 }
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitComponents<'a>(
-    #[cbor(borrow)] pub CborVec<ComponentIdentifier<'a>, SUIT_MAX_INDEX_NUM>,
-); // += at least 1
+pub struct SuitComponents<'a>(#[cbor(borrow)] CborVec<ComponentIdentifier<'a>, SUIT_MAX_INDEX_NUM>); // += at least 1
+
+impl<'a> SuitComponents<'a> {
+    pub fn get(&self, index: usize) -> Option<&ComponentIdentifier<'a>> {
+        self.0.0.get(index)
+    }
+}
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct ComponentIdentifier<'a>(#[cbor(borrow)] pub CborVec<&'a ByteSlice, SUIT_MAX_INDEX_NUM>);
+pub struct ComponentIdentifier<'a>(#[cbor(borrow)] CborVec<&'a ByteSlice, SUIT_MAX_INDEX_NUM>);
+
+impl<'a> ComponentIdentifier<'a> {
+    pub fn get(&self, index: usize) -> Option<&'a [u8]> {
+        self.0.0.get(index).copied().map(|b| b.as_ref())
+    }
+}
 
 #[derive(Debug, Encode, Decode)]
-pub struct SuitSharedSequence<'a>(#[b(0)] pub RawInput<'a>); // + = at least 1
+pub struct SuitSharedSequence<'a>(#[b(0)] pub(crate) RawInput<'a>); // + = at least 1
 
 pub trait SuitSharedSequenceHandler {
     fn on_conditions(
@@ -291,7 +305,7 @@ pub struct SuitDirectiveTryEachArgumentShared<'a> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitCommandSequence<'a>(#[b(0)] pub RawInput<'a>);
+pub struct SuitCommandSequence<'a>(#[b(0)] pub(crate) RawInput<'a>);
 
 pub trait SuitCommandHandler {
     fn on_conditions(
@@ -322,7 +336,7 @@ pub enum CommandCustomValue<'a> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitRepPolicy(SuitReportingBits);
+pub struct SuitRepPolicy(pub SuitReportingBits);
 
 bitflags::bitflags! {
     #[derive(Debug)]
@@ -356,6 +370,19 @@ pub enum SuitCondition {
 
     #[n(24)]
     DeviceIdentifier(#[n(0)] SuitRepPolicy),
+}
+impl SuitCondition {
+    pub fn policy(&self) -> &SuitReportingBits {
+        match self {
+            SuitCondition::VendorIdentifier(SuitRepPolicy(p))
+            | SuitCondition::ClassIdentifier(SuitRepPolicy(p))
+            | SuitCondition::ImageMatch(SuitRepPolicy(p))
+            | SuitCondition::ComponentSlot(SuitRepPolicy(p))
+            | SuitCondition::CheckContent(SuitRepPolicy(p))
+            | SuitCondition::Abort(SuitRepPolicy(p))
+            | SuitCondition::DeviceIdentifier(SuitRepPolicy(p)) => p,
+        }
+    }
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -392,6 +419,19 @@ pub enum SuitDirective<'a> {
     Invoke(#[n(0)] SuitRepPolicy),
 }
 
+impl SuitDirective<'_> {
+    pub fn policy(&self) -> Option<&SuitReportingBits> {
+        match self {
+            SuitDirective::Write(SuitRepPolicy(p))
+            | SuitDirective::Fetch(SuitRepPolicy(p))
+            | SuitDirective::Copy(SuitRepPolicy(p))
+            | SuitDirective::Swap(SuitRepPolicy(p))
+            | SuitDirective::Invoke(SuitRepPolicy(p)) => Some(p),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitDirectiveTryEachArgument<'a>(
@@ -403,9 +443,9 @@ pub struct SuitDirectiveTryEachArgument<'a>(
 pub struct SuitParameters<'a> {
     #[n(1)]
     #[cbor(decode_with = "crate::suit_decode::decode_uuid_or_cborpen")]
-    pub vendor_identifier: Option<&'a ByteSlice>, // Rfc4122Uuid / cbor-pen
+    vendor_identifier: Option<&'a ByteSlice>, // Rfc4122Uuid / cbor-pen
     #[n(2)]
-    pub class_identifier: Option<Rfc4122Uuid>,
+    class_identifier: Option<Rfc4122Uuid>,
     #[b(3)] // We borrow the bstr
     pub image_digest: Option<BstrSuitDigest<'a>>,
     #[n(5)]
@@ -429,6 +469,15 @@ pub struct SuitParameters<'a> {
     #[n(25)]
     pub fetch_args: Option<&'a ByteSlice>,
     // custom: Option<CustomParameterValue,
+}
+
+impl SuitParameters<'_> {
+    pub fn vendor_identifier(&self) -> Option<&[u8]> {
+        self.vendor_identifier.map(|b| b.as_ref())
+    }
+    pub fn class_identifier(&self) -> Option<&[u8; 16]> {
+        self.class_identifier.as_ref().map(|b| b.as_ref())
+    }
 }
 
 // #[derive(Debug, Clone, Encode, Decode)]

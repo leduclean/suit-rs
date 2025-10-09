@@ -645,6 +645,7 @@ name = "suit-rs"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.9.4",
+ "cbor-diag",
  "cbor-macro",
  "cboritem",
  "defmt",
