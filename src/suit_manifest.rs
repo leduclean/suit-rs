@@ -420,14 +420,14 @@ pub enum SuitDirective<'a> {
 }
 
 impl SuitDirective<'_> {
-    pub fn policy(&self) -> &SuitReportingBits {
+    pub fn policy(&self) -> Option<&SuitReportingBits> {
         match self {
             SuitDirective::Write(SuitRepPolicy(p))
             | SuitDirective::Fetch(SuitRepPolicy(p))
             | SuitDirective::Copy(SuitRepPolicy(p))
             | SuitDirective::Swap(SuitRepPolicy(p))
-            | SuitDirective::Invoke(SuitRepPolicy(p)) => p,
-            _ => panic!("Directive does not have a reporting policy"),
+            | SuitDirective::Invoke(SuitRepPolicy(p)) => Some(p),
+            _ => None,
         }
     }
 }

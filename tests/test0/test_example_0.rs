@@ -117,7 +117,7 @@ impl suit_manifest::SuitCommandHandler for ValidateHandler {
             .first()
             .expect("Expected at least one directive in validate command");
 
-        let policy = first_directive.policy();
+        let policy = first_directive.policy().expect("Expected directive policy");
 
         assert_eq!(
             policy.bits(),

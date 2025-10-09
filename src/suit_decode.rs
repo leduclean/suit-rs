@@ -184,7 +184,7 @@ impl<'a, Ctx> minicbor::Decode<'a, Ctx> for CommandCustomValue<'a> {
 
 /// Helper : accept RFC4122 UUID (bstr len 16) or cbor-pen tag (#6.112 (bstr))
 pub(crate) fn decode_uuid_or_cborpen<'a, Ctx>(
-    // TODO: refactore by using [cbor(tag=112)] in new VendorIdentifier type
+    // TODO: refactor by using [cbor(tag=112)] in new VendorIdentifier type
     d: &mut Decoder<'a>,
     _ctx: &mut Ctx,
 ) -> Result<Option<&'a ByteSlice>, DecodeError> {
