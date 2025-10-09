@@ -184,6 +184,7 @@ impl<'a, Ctx> minicbor::Decode<'a, Ctx> for CommandCustomValue<'a> {
 
 /// Helper : accept RFC4122 UUID (bstr len 16) or cbor-pen tag (#6.112 (bstr))
 pub(crate) fn decode_uuid_or_cborpen<'a, Ctx>(
+    // TODO: refactor by using [cbor(tag=112)] in new VendorIdentifier type
     d: &mut Decoder<'a>,
     _ctx: &mut Ctx,
 ) -> Result<Option<&'a ByteSlice>, DecodeError> {
@@ -275,8 +276,7 @@ fn is_valid_tag38ltag(s: &str) -> bool {
 }
 
 impl<'a> SuitSharedSequence<'a> {
-    #[allow(dead_code)]
-    fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
+    pub fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitSharedSequenceHandler,
     {
@@ -354,8 +354,7 @@ impl<'a> SuitSharedSequence<'a> {
 }
 
 impl<'a> SuitCommandSequence<'a> {
-    #[allow(dead_code)]
-    fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
+    pub fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitCommandHandler,
     {
