@@ -17,7 +17,7 @@ use minicbor::{Decode, Decoder, data::Type, decode::Error as DecodeError};
 
 // Wrapping structure around the inner flat array bytes
 #[derive(Debug)]
-pub struct FlatSequence<'a>(pub &'a [u8]);
+pub(crate) struct FlatSequence<'a>(pub(crate) &'a [u8]);
 
 /// We only want the input bytes to treat it when we want with `decode_and_dispatch()`
 impl<'b, C> Decode<'b, C> for FlatSequence<'b> {

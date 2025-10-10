@@ -249,7 +249,7 @@ impl<'a> ComponentIdentifier<'a> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitSharedSequence<'a>(#[b(0)] pub FlatSequence<'a>); // + = at least 1
+pub struct SuitSharedSequence<'a>(#[b(0)] pub(crate) FlatSequence<'a>); // + = at least 1
 
 #[derive(Debug, Encode, Decode)]
 pub enum SuitSharedCommand<'a> {
@@ -287,7 +287,7 @@ pub struct SuitDirectiveTryEachArgumentShared<'a> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitCommandSequence<'a>(#[b(0)] pub FlatSequence<'a>);
+pub struct SuitCommandSequence<'a>(#[b(0)] pub(crate) FlatSequence<'a>);
 
 #[derive(Debug, Encode)]
 pub enum CommandCustomValue<'a> {
