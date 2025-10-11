@@ -1,9 +1,6 @@
 //! struct to decode "flat" op/arg sequences used by SUIT:
 //! - SUIT_Shared_Sequence (flat: [ op, arg, op, arg, ... ])
 //! - SUIT_Command_Sequence (flat: [ op, arg, op, arg, ... ])
-//!
-use core::marker::PhantomData;
-
 use crate::{
     errors::SuitError,
     suit_manifest::{
@@ -267,7 +264,7 @@ impl<'b> Iterator for FlatSequenceIter<'b, SuitCondition> {
             if matches!(pair.op, 1 | 2 | 3 | 5 | 6 | 14 | 24) {
                 return Some(PairView {
                     pair,
-                    _ty: PhantomData,
+                    _ty: core::marker::PhantomData,
                 });
             }
         }
@@ -285,7 +282,7 @@ impl<'b> Iterator for FlatSequenceIter<'b, SuitDirective<'b>> {
             if matches!(pair.op, 12 | 15 | 18 | 20 | 21 | 22 | 23 | 31 | 32) {
                 return Some(PairView {
                     pair,
-                    _ty: PhantomData,
+                    _ty: core::marker::PhantomData,
                 });
             }
         }
@@ -303,7 +300,7 @@ impl<'b> Iterator for FlatSequenceIter<'b, SuitSharedCommand<'b>> {
             if matches!(pair.op, 12 | 32 | 15 | 20) {
                 return Some(PairView {
                     pair,
-                    _ty: PhantomData,
+                    _ty: core::marker::PhantomData,
                 });
             }
         }
@@ -321,7 +318,7 @@ impl<'b> Iterator for FlatSequenceIter<'b, CommandCustomValue<'b>> {
             if pair.op < 0 {
                 return Some(PairView {
                     pair,
-                    _ty: PhantomData,
+                    _ty: core::marker::PhantomData,
                 });
             }
         }
