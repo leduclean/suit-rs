@@ -4,13 +4,10 @@ use crate::handler::*;
 use crate::suit_cose::*;
 use crate::suit_manifest::*;
 use core::str;
-use heapless::Vec;
 use minicbor::bytes::ByteSlice;
-use minicbor::{
-    Decode, Decoder,
-    data::Type,
-    decode::{ArrayIterWithCtx, Error as DecodeError},
-};
+use minicbor::{Decode, Decoder, data::Type, decode::Error as DecodeError};
+
+const SUIT_MAX_FLAT_PAIR: usize = 20;
 
 #[cfg(all(feature = "alloc", feature = "defmt"))]
 use minicbor::display;
@@ -27,24 +24,6 @@ where
         info!("Shared sequence raw: {}", display(bytes));
         let inner = T::decode(d, &mut ())?;
         Ok(Debug(inner))
-    }
-}
-
-impl<'a, T, Ctx, const N: usize> Decode<'a, Ctx> for CborVec<T, N>
-where
-    T: Decode<'a, Ctx> + core::fmt::Debug,
-{
-    fn decode(d: &mut Decoder<'a>, ctx: &mut Ctx) -> Result<Self, DecodeError> {
-        let iter: ArrayIterWithCtx<_, T> = d.array_iter_with(ctx)?;
-        let mut vec: Vec<T, N> = Vec::new();
-
-        for x in iter {
-            let item = x?;
-            vec.push(item)
-                .map_err(|_| DecodeError::message("Inner decoding buffer is full"))?;
-        }
-
-        Ok(CborVec(vec))
     }
 }
 
@@ -98,7 +77,7 @@ where
     }
 }
 
-impl<'a, Ctx> minicbor::Decode<'a, Ctx> for IndexArg {
+impl<'a, Ctx> minicbor::Decode<'a, Ctx> for IndexArg<'a> {
     fn decode(d: &mut minicbor::Decoder<'a>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
         let ty = d.datatype()?;
         match ty {
@@ -112,24 +91,7 @@ impl<'a, Ctx> minicbor::Decode<'a, Ctx> for IndexArg {
                 Ok(IndexArg::True(b))
             }
 
-            Type::Array => {
-                let len = d.array()?;
-                let mut vec: Vec<u64, SUIT_MAX_INDEX_NUM> = Vec::new();
-                if let Some(n) = len {
-                    for _ in 0..n {
-                        vec.push(d.u64()?).map_err(|_| {
-                            DecodeError::message("Inner Index Arg decoding buffer is full")
-                        })?;
-                    }
-                } else {
-                    loop {
-                        if let Type::Break = d.datatype()? {
-                            break;
-                        }
-                    }
-                }
-                Ok(IndexArg::Multiple(CborVec(vec)))
-            }
+            Type::Array => Ok(IndexArg::Multiple(IterableU64::decode(d, _ctx)?)),
 
             _ => Err(minicbor::decode::Error::type_mismatch(ty)
                 .with_message("IndexArg: expected Number | Bool | Array")),
@@ -264,7 +226,7 @@ impl<'a> SuitSharedSequence<'a> {
     where
         H: SuitSharedSequenceHandler,
     {
-        let pairs = self.0.collect_pairs::<SUIT_MAX_ARRAY_LENGTH>()?;
+        let pairs = self.0.collect_pairs::<SUIT_MAX_FLAT_PAIR>()?;
         let cond_iter = iter_conditions(&pairs);
         let command_iter = iter_shared_commands(&pairs);
         handler.on_conditions(cond_iter)?;
@@ -278,7 +240,7 @@ impl<'a> SuitCommandSequence<'a> {
     where
         H: SuitCommandHandler,
     {
-        let pairs = self.0.collect_pairs::<SUIT_MAX_ARRAY_LENGTH>()?;
+        let pairs = self.0.collect_pairs::<SUIT_MAX_FLAT_PAIR>()?;
         let cond_iter = iter_conditions(&pairs);
         let direct_iter = iter_directives(&pairs);
         let custom_iter = iter_custom(&pairs);

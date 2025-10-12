@@ -1,13 +1,7 @@
-use crate::suit_manifest::CborVec;
 use core::str;
 use minicbor::{
     Decode, Decoder, Encode, bytes::ByteSlice, data::Type, decode::Error as DecodeError,
 };
-
-// ! arbitrary for now, should explore how much it should be
-const MAX_COSE_SIGN: usize = 10;
-const MAX_COSE_RECIPIENT: usize = 10;
-const MAX_KEY_OPS: usize = 10;
 
 #[derive(Decode, Encode, Debug)]
 #[cbor(map)]
@@ -48,6 +42,8 @@ struct SigStructureForSignature1<'a> {
     payload: &'a [u8],
 }
 
+iter_wrapper!(IterCoseSignature, CoseSignature<'a>);
+
 #[derive(Debug, Encode, Decode)]
 #[cbor(tag(98))]
 #[cbor(array)]
@@ -60,12 +56,12 @@ pub struct CoseSign<'a> {
     #[cbor(b(2), with = "minicbor::bytes")]
     payload: &'a [u8],
     #[b(3)]
-    signature: CborVec<CoseSignature<'a>, MAX_COSE_SIGN>,
+    signature: IterCoseSignature<'a>,
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(array)]
-struct CoseSignature<'a> {
+pub(crate) struct CoseSignature<'a> {
     #[cbor(b(0), with = "minicbor::bytes")]
     protected: &'a [u8],
     #[b(1)]
@@ -73,6 +69,8 @@ struct CoseSignature<'a> {
     #[cbor(b(3), with = "minicbor::bytes")]
     signature: &'a [u8],
 }
+
+iter_wrapper!(IterCoseRecipient, CoseRecipient<'a>);
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(tag(97))]
@@ -91,7 +89,7 @@ pub struct CoseMac<'a> {
     tag: &'a [u8],
 
     #[n(4)]
-    pub recipients: CborVec<CoseRecipient<'a>, MAX_COSE_RECIPIENT>,
+    pub recipients: IterCoseRecipient<'a>,
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -137,6 +135,8 @@ struct MacStructure<'a> {
     payload: &'a [u8],
 }
 
+iter_wrapper!(IterTstrOrInt, TstrOrInt<'a>);
+
 #[allow(dead_code)]
 #[derive(minicbor::Decode, Debug)]
 #[cbor(map)]
@@ -149,7 +149,7 @@ pub(crate) struct CoseKey<'a> {
     #[n(3)]
     pub(crate) alg: Option<TstrOrInt<'a>>,
     #[n(4)]
-    pub(crate) key_ops: CborVec<TstrOrInt<'a>, MAX_KEY_OPS>,
+    pub(crate) key_ops: IterTstrOrInt<'a>,
 }
 #[derive(Debug, Encode)]
 pub enum TstrOrInt<'a> {
