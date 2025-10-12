@@ -1,6 +1,5 @@
 use crate::suit_cose::*;
 use crate::{bstr_struct::BstrStruct, errors::SuitError, flat_seq::FlatSequence};
-use heapless::Vec;
 use minicbor::{
     Decode, Encode,
     bytes::{ByteArray, ByteSlice},
@@ -8,47 +7,9 @@ use minicbor::{
 
 type Rfc4122Uuid = ByteArray<16>;
 
-pub const SUIT_MAX_ARRAY_LENGTH: usize = 20;
-
-#[allow(dead_code)]
-const SUIT_MAX_KEY_NUM: usize = 6; // must be <=64
-
-#[allow(dead_code)]
-const SUIT_MAX_NAME_LENGTH: usize = 256; // the length of path or name such as component_identifier
-
-#[allow(dead_code)]
-const SUIT_MAX_URI_LENGTH: usize = 256; // the length of uri to fetch something (if we decide to turn to owned String)
-
-const SUIT_MAX_COMPONENT_NUM: usize = 3;
-
-const SUIT_MAX_DEPENDENCY_NUM: usize = 1;
-
-pub const SUIT_MAX_INDEX_NUM: usize = SUIT_MAX_COMPONENT_NUM + SUIT_MAX_DEPENDENCY_NUM;
-
-#[allow(dead_code)]
-const SUIT_MAX_ARGS_LENGTH: usize = 64;
-
-#[allow(dead_code)]
-const SUIT_MAX_DATA_SIZE: usize = 8 * 1024 * 1024;
-
 /* -------------------------------------------------------------------------- */
 /*                                bstr Wrappers                               */
 /* -------------------------------------------------------------------------- */
-
-macro_rules! bstr_wrapper {
-    ($name:ident, $inner:ty) => {
-        #[derive(Debug, Encode, Decode)]
-        #[cbor(transparent)]
-        pub struct $name<'a>(#[cbor(borrow)] pub(crate) BstrStruct<'a, $inner>);
-
-        impl<'a> $name<'a> {
-            pub fn get(&self) -> Result<$inner, SuitError> {
-                self.0.get()
-            }
-        }
-    };
-}
-
 bstr_wrapper!(BstrSuitDigest, SuitDigest<'a>);
 bstr_wrapper!(BstrSuitAuthenticationBlock, SuitAuthenticationBlock<'a>);
 bstr_wrapper!(BstrSuitAuthentication, SuitAuthentication<'a>);
@@ -58,10 +19,20 @@ bstr_wrapper!(BstrSuitTextMap, SuitTextMap<'a>);
 bstr_wrapper!(BstrSuitManifest, SuitManifest<'a>);
 bstr_wrapper!(BstrSuitSharedSequence, SuitSharedSequence<'a>);
 /* -------------------------------------------------------------------------- */
-
-// We overcharge the heapless Vec<T,N> to impl decode trait on it
-#[derive(Debug)]
-pub struct CborVec<T, const N: usize>(pub Vec<T, N>);
+/*                                lazy iterable element Wrappers               */
+/* -------------------------------------------------------------------------- */
+iter_wrapper!(
+    IterableSuitSeverableManifestMember,
+    SuitSeverableManifestMembers<'a>
+);
+iter_wrapper!(IterableSuitPayload, SuitPayload<'a>);
+iter_wrapper!(IterableComponentIdentifier, ComponentIdentifier<'a>);
+iter_wrapper!(IterableByteSlice, &'a ByteSlice);
+iter_wrapper!(IterableU64, u64);
+iter_wrapper!(IterBstrSuitSharedSequence, BstrSuitSharedSequence<'a>);
+iter_wrapper!(IterBstrSuitCommandSequence, BstrSuitCommandSequence<'a>);
+iter_wrapper!(IterSuitTextComponentPair, SuitTextComponentPair<'a>);
+iter_wrapper!(IterSuitTagAndTextLmap, (Tag38LTag<'a>, SuitTextLMap<'a>));
 
 // Wrapping structure helper to show the inner cbor structure you are trying to decode
 // ! Make sure it doesn't exists anymore on release
@@ -79,9 +50,9 @@ pub struct SuitEnvelope<'a> {
     #[b(3)]
     pub manifest: BstrSuitManifest<'a>,
     #[n(4)]
-    manifest_members: Option<CborVec<SuitSeverableManifestMembers<'a>, SUIT_MAX_ARRAY_LENGTH>>,
+    manifest_members: Option<IterableSuitSeverableManifestMember<'a>>,
     #[n(5)]
-    pub payload: Option<CborVec<SuitPayload<'a>, SUIT_MAX_ARRAY_LENGTH>>,
+    pub payload: Option<IterableSuitPayload<'a>>,
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -229,21 +200,23 @@ pub struct SuitCommon<'a> {
 }
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitComponents<'a>(#[cbor(borrow)] CborVec<ComponentIdentifier<'a>, SUIT_MAX_INDEX_NUM>); // += at least 1
+pub struct SuitComponents<'a>(#[cbor(borrow)] IterableComponentIdentifier<'a>); // += at least 1
 
 impl<'a> SuitComponents<'a> {
-    pub fn get(&self, index: usize) -> Option<&ComponentIdentifier<'a>> {
-        self.0.0.get(index)
+    pub fn get(
+        &self,
+    ) -> Result<impl Iterator<Item = Result<ComponentIdentifier<'a>, SuitError>>, SuitError> {
+        self.0.get()
     }
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct ComponentIdentifier<'a>(#[cbor(borrow)] CborVec<&'a ByteSlice, SUIT_MAX_INDEX_NUM>);
+pub struct ComponentIdentifier<'a>(#[cbor(borrow)] IterableByteSlice<'a>);
 
 impl<'a> ComponentIdentifier<'a> {
-    pub fn get(&self, index: usize) -> Option<&'a [u8]> {
-        self.0.0.get(index).copied().map(|b| b.as_ref())
+    pub fn get(&self) -> Result<impl Iterator<Item = Result<&'a ByteSlice, SuitError>>, SuitError> {
+        self.0.get()
     }
 }
 
@@ -254,7 +227,7 @@ pub struct SuitSharedSequence<'a>(#[b(0)] pub(crate) FlatSequence<'a>); // + = a
 #[derive(Debug, Encode, Decode)]
 pub enum SuitSharedCommand<'a> {
     #[n(12)]
-    SetComponentIndex(#[n(0)] IndexArg),
+    SetComponentIndex(#[n(0)] IndexArg<'a>),
     #[b(32)]
     RunSequence(
         #[b(0)]
@@ -268,21 +241,20 @@ pub enum SuitSharedCommand<'a> {
 }
 
 #[derive(Debug, Encode)]
-#[allow(variant_size_differences)]
-pub enum IndexArg {
+pub enum IndexArg<'a> {
     #[n(0)]
     Single(#[n(0)] u64), // uint
     #[n(1)]
     True(#[n(0)] bool), // true
     #[n(2)]
-    Multiple(#[n(0)] CborVec<u64, SUIT_MAX_INDEX_NUM>), // [+uint]
+    Multiple(#[n(0)] IterableU64<'a>), // [+uint]
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitDirectiveTryEachArgumentShared<'a> {
     #[cbor(borrow)]
-    pub sequences: Option<CborVec<BstrSuitSharedSequence<'a>, SUIT_MAX_ARRAY_LENGTH>>, // 2* bstr.cbor SUIT_Shared_Sequence
+    pub sequences: Option<IterBstrSuitSharedSequence<'a>>, // 2* bstr.cbor SUIT_Shared_Sequence
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -359,7 +331,7 @@ pub enum SuitDirective<'a> {
     Write(#[n(0)] SuitRepPolicy),
 
     #[n(12)]
-    SetComponentIndex(#[n(0)] IndexArg),
+    SetComponentIndex(#[n(0)] IndexArg<'a>),
 
     #[n(32)]
     RunSequence(
@@ -401,9 +373,7 @@ impl SuitDirective<'_> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct SuitDirectiveTryEachArgument<'a>(
-    #[cbor(borrow)] pub CborVec<BstrSuitCommandSequence<'a>, SUIT_MAX_ARRAY_LENGTH>,
-);
+pub struct SuitDirectiveTryEachArgument<'a>(#[cbor(borrow)] pub IterBstrSuitCommandSequence<'a>);
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
@@ -467,7 +437,7 @@ pub struct Tag38LTag<'a>(pub &'a str);
 #[cbor(transparent)]
 pub struct SuitTextMap<'a> {
     #[cbor(borrow)]
-    pub entries: CborVec<(Tag38LTag<'a>, SuitTextLMap<'a>), SUIT_MAX_ARRAY_LENGTH>,
+    pub entries: IterSuitTagAndTextLmap<'a>,
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -475,7 +445,7 @@ pub struct SuitTextLMap<'a> {
     #[b(0)]
     pub text_keys: SuitTextKeys<'a>,
     #[b(1)]
-    pub components: CborVec<SuitTextComponentPair<'a>, SUIT_MAX_ARRAY_LENGTH>,
+    pub components: IterSuitTextComponentPair<'a>,
 }
 #[derive(Debug, Encode, Decode)]
 pub struct SuitTextComponentPair<'a> {

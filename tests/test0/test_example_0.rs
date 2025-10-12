@@ -157,10 +157,19 @@ impl SuitStartHandler for StartHandler {
         let common = manifest.common.get().expect("Failed to get common fields");
         let component = common
             .components
-            .get(0)
-            .expect("Expected at least one component");
+            .get()
+            .expect("Valid Format")
+            .next()
+            .expect("Expected at least one component")
+            .expect("Expected valid first component");
         assert_eq!(
-            component.get(0).expect("Expected first component data"),
+            component
+                .get()
+                .expect("Valid Format")
+                .next()
+                .expect("Expected at least first slice")
+                .expect("Expected valid first slice")
+                .as_ref(),
             &[0]
         );
 
