@@ -266,7 +266,7 @@ impl<'a> SuitSharedSequence<'a> {
     {
         let pairs = self.0.collect_pairs::<SUIT_MAX_ARRAY_LENGTH>()?;
         let cond_iter = iter_conditions(&pairs);
-        let command_iter = iter_shared_command(&pairs);
+        let command_iter = iter_shared_commands(&pairs);
         handler.on_conditions(cond_iter)?;
         handler.on_commands(command_iter)?;
         Ok(())

@@ -192,6 +192,10 @@ impl<'b> TryFrom<&Pair<'b>> for CommandCustomValue<'b> {
     }
 }
 
+/// A small view returned by *targeted* iterators. Carries the `op` so caller can inspect it
+/// before decoding, and exposes `get()` which returns the concrete target type without
+/// requiring a turbofish because the iterator's Item is already specialized.
+#[derive(Debug, Clone, Copy)]
 pub struct PairView<'b, T> {
     pair: &'b Pair<'b>,
     _ty: core::marker::PhantomData<&'b T>,
@@ -200,6 +204,12 @@ impl<'b, T> PairView<'b, T>
 where
     T: TryFrom<&'b Pair<'b>, Error = SuitError>,
 {
+    pub fn new(pair: &'b Pair<'b>) -> Self {
+        Self {
+            pair,
+            _ty: core::marker::PhantomData,
+        }
+    }
     pub fn op(&self) -> i64 {
         self.pair.op
     }
@@ -212,118 +222,37 @@ where
     }
 }
 
-// Wrapper to be able to implement different iterator implementation depending on entry type
-#[derive(Debug)]
-pub struct FlatSequenceIter<'b, T> {
-    inner: &'b [Pair<'b>],
-    idx: usize,
-    _marker: core::marker::PhantomData<&'b T>, // Is it 'b here ?
-}
-
-impl<'b, T> FlatSequenceIter<'b, T> {
-    fn new(slice: &'b [Pair<'b>]) -> Self {
-        Self {
-            inner: slice,
-            idx: 0,
-            _marker: core::marker::PhantomData,
-        }
-    }
-}
-
-// Give a `SuitCondition` Iterable struct
-pub(crate) fn iter_conditions<'b>(pairs: &'b [Pair<'b>]) -> FlatSequenceIter<'b, SuitCondition> {
-    FlatSequenceIter::new(pairs)
-}
-
-// Give a `SuitSharedCommand` Iterable struct
-pub(crate) fn iter_shared_command<'b>(
+pub(crate) fn iter_conditions<'b>(
     pairs: &'b [Pair<'b>],
-) -> FlatSequenceIter<'b, SuitSharedCommand<'b>> {
-    FlatSequenceIter::new(pairs)
+) -> impl Iterator<Item = PairView<'b, SuitCondition>> {
+    pairs
+        .iter()
+        .filter(|p| matches!(p.op, 1 | 2 | 3 | 5 | 6 | 14 | 24))
+        .map(PairView::new)
 }
 
-// Give a `SuitSharedCommand` Iterable struct
 pub(crate) fn iter_directives<'b>(
     pairs: &'b [Pair<'b>],
-) -> FlatSequenceIter<'b, SuitDirective<'b>> {
-    FlatSequenceIter::new(pairs)
+) -> impl Iterator<Item = PairView<'b, SuitDirective<'b>>> {
+    pairs
+        .iter()
+        .filter(|p| matches!(p.op, 12 | 15 | 18 | 20 | 21 | 22 | 23 | 31 | 32))
+        .map(PairView::new)
 }
-// Give a `CustomCommand` Iterable struct
+
+pub(crate) fn iter_shared_commands<'b>(
+    pairs: &'b [Pair<'b>],
+) -> impl Iterator<Item = PairView<'b, SuitSharedCommand<'b>>> {
+    pairs
+        .iter()
+        .filter(|p| matches!(p.op, 12 | 32 | 15 | 20))
+        .map(PairView::new)
+}
+
 pub(crate) fn iter_custom<'b>(
     pairs: &'b [Pair<'b>],
-) -> FlatSequenceIter<'b, CommandCustomValue<'b>> {
-    FlatSequenceIter::new(pairs)
-}
-
-impl<'b> Iterator for FlatSequenceIter<'b, SuitCondition> {
-    type Item = PairView<'b, SuitCondition>;
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.idx < self.inner.len() {
-            let pair = &self.inner[self.idx];
-            self.idx += 1;
-            if matches!(pair.op, 1 | 2 | 3 | 5 | 6 | 14 | 24) {
-                return Some(PairView {
-                    pair,
-                    _ty: core::marker::PhantomData,
-                });
-            }
-        }
-        None
-    }
-}
-
-impl<'b> Iterator for FlatSequenceIter<'b, SuitDirective<'b>> {
-    type Item = PairView<'b, SuitDirective<'b>>;
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.idx < self.inner.len() {
-            let pair = &self.inner[self.idx];
-            self.idx += 1;
-
-            if matches!(pair.op, 12 | 15 | 18 | 20 | 21 | 22 | 23 | 31 | 32) {
-                return Some(PairView {
-                    pair,
-                    _ty: core::marker::PhantomData,
-                });
-            }
-        }
-        None
-    }
-}
-
-impl<'b> Iterator for FlatSequenceIter<'b, SuitSharedCommand<'b>> {
-    type Item = PairView<'b, SuitSharedCommand<'b>>;
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.idx < self.inner.len() {
-            let pair = &self.inner[self.idx];
-            self.idx += 1;
-
-            if matches!(pair.op, 12 | 32 | 15 | 20) {
-                return Some(PairView {
-                    pair,
-                    _ty: core::marker::PhantomData,
-                });
-            }
-        }
-        None
-    }
-}
-
-impl<'b> Iterator for FlatSequenceIter<'b, CommandCustomValue<'b>> {
-    type Item = PairView<'b, CommandCustomValue<'b>>;
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.idx < self.inner.len() {
-            let pair = &self.inner[self.idx];
-            self.idx += 1;
-
-            if pair.op < 0 {
-                return Some(PairView {
-                    pair,
-                    _ty: core::marker::PhantomData,
-                });
-            }
-        }
-        None
-    }
+) -> impl Iterator<Item = PairView<'b, CommandCustomValue<'b>>> {
+    pairs.iter().filter(|p| p.op < 0).map(PairView::new)
 }
 
 mod tests {
