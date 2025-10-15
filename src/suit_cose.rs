@@ -61,7 +61,7 @@ pub struct CoseSign<'a> {
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(array)]
-pub(crate) struct CoseSignature<'a> {
+pub struct CoseSignature<'a> {
     #[cbor(b(0), with = "minicbor::bytes")]
     protected: &'a [u8],
     #[b(1)]

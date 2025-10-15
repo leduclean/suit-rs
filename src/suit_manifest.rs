@@ -194,7 +194,7 @@ pub enum DigestOrCbor<'a, T: 'a> {
 #[cbor(map)]
 pub struct SuitCommon<'a> {
     #[n(2)]
-    pub components: SuitComponents<'a>, // TODO += at least 1
+    pub components: SuitComponents<'a>,
     #[b(4)] // we borrow bstr
     pub shared_seq: Option<BstrSuitSharedSequence<'a>>,
 }
