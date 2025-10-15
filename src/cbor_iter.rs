@@ -3,6 +3,9 @@ use core::marker::PhantomData;
 use minicbor::decode::Error as DecodeError;
 use minicbor::{Decode, Decoder};
 
+/// Internal bytes wrapper over CBOR arrays of type `T`.
+///
+/// Used by [`ArrayIter`] to lazily decode CBOR arrays.
 #[derive(Debug)]
 pub(crate) struct CborIter<'b, T> {
     bytes: &'b [u8],
@@ -29,6 +32,9 @@ impl<'b, T> CborIter<'b, T>
 where
     T: Decode<'b, ()>,
 {
+    /// Give iterator over the array.
+    ///
+    /// It is exposed to the public API with [`iter_wrapper!`].
     pub(crate) fn get(&self) -> Result<impl Iterator<Item = Result<T, SuitError>>, SuitError> {
         let mut d = Decoder::new(self.bytes);
         if let Some(len) = d.array()? {
@@ -43,6 +49,7 @@ where
     }
 }
 
+/// An iterator over CBOR array
 struct ArrayIter<'b, T> {
     decoder: Decoder<'b>,
     remaining: u64,
