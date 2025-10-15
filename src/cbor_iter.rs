@@ -62,3 +62,56 @@ impl<'b, T: Decode<'b, ()>> Iterator for ArrayIter<'b, T> {
         }
     }
 }
+
+mod tests {
+
+    #[test]
+    fn test_get_iter() {
+        use super::*;
+        use crate::suit_manifest::SuitComponentIdentifier;
+
+        let components: cboritem::CborItem = cbor_macro::cbo!(
+            r#"[[h'00'],
+                    [h'02']
+                    ]"#
+        );
+        let cbor_iter: CborIter<'_, SuitComponentIdentifier> = CborIter {
+            bytes: &components,
+            _marker: core::marker::PhantomData,
+        };
+        let mut compo_iter = cbor_iter.get().expect("Top level array");
+
+        let first_id = compo_iter
+            .next()
+            .expect("Expected first component")
+            .expect("Component decoding failed");
+        let mut iter_first_id_slice = first_id.get().expect("Expected top-level array");
+        let first_id_slice = iter_first_id_slice
+            .next()
+            .expect("Expected first identifier slice")
+            .expect("Identifier slice decoding failed");
+
+        let id1_bytes = cbor_macro::cbo!(r#"h'00'"#);
+        let mut d1 = Decoder::new(&id1_bytes);
+
+        assert_eq!(first_id_slice.as_ref(), d1.bytes().unwrap(),);
+        assert!(iter_first_id_slice.next().is_none());
+
+        let second_id = compo_iter
+            .next()
+            .expect("Expected second component")
+            .expect("Component decoding failed");
+        let mut iter_second_id_slice = second_id.get().expect("Expected top-level array");
+        let second_id_slice = iter_second_id_slice
+            .next()
+            .expect("Expected first identifier slice")
+            .expect("Identifier slice decoding failed");
+
+        let id2_bytes = cbor_macro::cbo!(r#"h'02'"#);
+        let mut d2 = Decoder::new(&id2_bytes);
+
+        assert_eq!(second_id_slice.as_ref(), d2.bytes().unwrap());
+        assert!(iter_second_id_slice.next().is_none());
+        assert!(compo_iter.next().is_none());
+    }
+}

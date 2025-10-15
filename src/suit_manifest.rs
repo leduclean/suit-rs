@@ -26,7 +26,7 @@ iter_wrapper!(
     SuitSeverableManifestMembers<'a>
 );
 iter_wrapper!(IterableSuitPayload, SuitPayload<'a>);
-iter_wrapper!(IterableComponentIdentifier, ComponentIdentifier<'a>);
+iter_wrapper!(IterableComponentIdentifier, SuitComponentIdentifier<'a>);
 iter_wrapper!(IterableByteSlice, &'a ByteSlice);
 iter_wrapper!(IterableU64, u64);
 iter_wrapper!(IterBstrSuitSharedSequence, BstrSuitSharedSequence<'a>);
@@ -205,16 +205,17 @@ pub struct SuitComponents<'a>(#[cbor(borrow)] IterableComponentIdentifier<'a>); 
 impl<'a> SuitComponents<'a> {
     pub fn get(
         &self,
-    ) -> Result<impl Iterator<Item = Result<ComponentIdentifier<'a>, SuitError>>, SuitError> {
+    ) -> Result<impl Iterator<Item = Result<SuitComponentIdentifier<'a>, SuitError>>, SuitError>
+    {
         self.0.get()
     }
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
-pub struct ComponentIdentifier<'a>(#[cbor(borrow)] IterableByteSlice<'a>);
+pub struct SuitComponentIdentifier<'a>(#[cbor(borrow)] IterableByteSlice<'a>);
 
-impl<'a> ComponentIdentifier<'a> {
+impl<'a> SuitComponentIdentifier<'a> {
     pub fn get(&self) -> Result<impl Iterator<Item = Result<&'a ByteSlice, SuitError>>, SuitError> {
         self.0.get()
     }
@@ -471,10 +472,6 @@ pub struct SuitTextComponentKeys<'a> {
     #[n(6)]
     pub component_version: Option<&'a str>,
 }
-
-#[derive(Debug, Encode, Decode, Hash, Eq, PartialEq)]
-#[cbor(transparent)]
-pub struct SuitComponentIdentifier<'a>(pub &'a str);
 
 #[derive(Debug, Decode, Encode)]
 #[cbor(map)]
