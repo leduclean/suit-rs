@@ -5,6 +5,7 @@ macro_rules! iter_wrapper {
         pub struct $name<'a>(#[cbor(borrow)] pub(crate) crate::cbor_iter::CborIter<'a, $inner>);
 
         impl<'a> $name<'a> {
+            #[inline]
             pub fn get(
                 &self,
             ) -> Result<
@@ -24,6 +25,7 @@ macro_rules! bstr_wrapper {
         pub struct $name<'a>(#[cbor(borrow)] pub(crate) BstrStruct<'a, $inner>);
 
         impl<'a> $name<'a> {
+            #[inline]
             pub fn get(&self) -> Result<$inner, SuitError> {
                 self.0.get()
             }
