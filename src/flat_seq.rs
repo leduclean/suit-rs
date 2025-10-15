@@ -12,11 +12,10 @@ use crate::{
 use heapless::Vec;
 use minicbor::{Decode, Decoder, data::Type, decode::Error as DecodeError};
 
-// Wrapping structure around the inner flat array bytes
+/// Wrapping structure around the inner CBOR flat array bytes.
 #[derive(Debug)]
 pub(crate) struct FlatSequence<'a>(pub(crate) &'a [u8]);
 
-/// We only want the input bytes to treat it when we want with `decode_and_dispatch()`
 impl<'b, C> Decode<'b, C> for FlatSequence<'b> {
     fn decode(d: &mut Decoder<'b>, _ctx: &mut C) -> Result<Self, DecodeError> {
         let start = d.position();
@@ -32,6 +31,7 @@ impl<'b, C> Decode<'b, C> for FlatSequence<'b> {
 }
 
 impl<'b> FlatSequence<'b> {
+    /// Collect the pairs relative to the [`FlatSequence`] inner bytes.
     pub(crate) fn collect_pairs<const N: usize>(&self) -> Result<Vec<Pair<'b>, N>, SuitError> {
         let mut d = Decoder::new(self.0);
         d.array()
@@ -66,7 +66,7 @@ fn read_next_pair<'b>(d: &mut Decoder<'b>) -> Result<Option<Pair<'b>>, SuitError
     }
 }
 
-// helper to read an op id (accept unsigned or negative int)
+/// helper to read an op id (accept unsigned or negative int)
 fn read_op_id<'b>(d: &mut Decoder<'b>) -> Result<Option<i64>, SuitError> {
     match d.datatype() {
         Ok(ty) => match ty {
@@ -192,9 +192,11 @@ impl<'b> TryFrom<&Pair<'b>> for CommandCustomValue<'b> {
     }
 }
 
-/// A small view returned by *targeted* iterators. Carries the `op` so caller can inspect it
-/// before decoding, and exposes `get()` which returns the concrete target type without
-/// requiring a turbofish because the iterator's Item is already specialized.
+/// A small view returned by *targeted* iterators.
+/// Carries the `op` so caller can inspect it before decoding, using [`PairView::op()`].
+///
+/// It exposes [`PairView::get()`] which returns the concrete target type without
+/// requiring a turbofish because the iterator's Item is already specialized with `T`.
 #[derive(Debug, Clone, Copy)]
 pub struct PairView<'b, T> {
     pair: &'b Pair<'b>,
@@ -210,13 +212,19 @@ where
             _ty: core::marker::PhantomData,
         }
     }
+
+    ///  *Op* of the current [`PairView`].
     pub fn op(&self) -> i64 {
         self.pair.op
     }
+
+    /// *Inner bytes* of the [`PairView`]
     pub fn bytes(&self) -> &'b [u8] {
         self.pair.bytes
     }
-
+    /// Decodes and returns the concrete value of type `T`.
+    ///
+    /// Returns an error if the pair cannot be converted into `T`.
     pub fn get(&self) -> Result<T, SuitError> {
         T::try_from(self.pair)
     }
