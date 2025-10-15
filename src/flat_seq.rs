@@ -204,7 +204,7 @@ impl<'b, T> PairView<'b, T>
 where
     T: TryFrom<&'b Pair<'b>, Error = SuitError>,
 {
-    pub fn new(pair: &'b Pair<'b>) -> Self {
+    fn new(pair: &'b Pair<'b>) -> Self {
         Self {
             pair,
             _ty: core::marker::PhantomData,
@@ -375,9 +375,23 @@ mod tests {
         let ci = cbor_macro::cbo!(r#"[1, 15, 2, 15] "#);
         let pairs = FlatSequence(&ci).collect_pairs::<4>().unwrap();
         let mut cond_iter = iter_conditions(&pairs);
+        let first_cond = cond_iter.next().expect("Expected first condition");
+        let second_cond = cond_iter.next().expect("Expected second condition");
 
-        assert!(cond_iter.next().is_some());
-        assert!(cond_iter.next().is_some());
+        assert_eq!(first_cond.op(), 1);
+        assert_eq!(second_cond.op(), 2);
+        assert!(matches!(
+            first_cond
+                .get()
+                .expect("First condition decoding should be ok"),
+            SuitCondition::VendorIdentifier(_)
+        ));
+        assert!(matches!(
+            second_cond
+                .get()
+                .expect("Second condition decoding should be ok"),
+            SuitCondition::ClassIdentifier(_)
+        ));
 
         assert!(cond_iter.next().is_none());
     }
