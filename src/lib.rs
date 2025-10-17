@@ -17,6 +17,7 @@ mod errors;
 mod flat_seq;
 mod suit_decode;
 mod suit_encode;
+mod validators;
 
 pub mod handler;
 pub mod suit_cose;

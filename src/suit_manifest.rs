@@ -1,5 +1,5 @@
-use crate::suit_cose::*;
 use crate::{bstr_struct::BstrStruct, errors::SuitError, flat_seq::FlatSequence};
+use crate::{suit_cose::*, validators};
 use minicbor::{
     Decode, Encode,
     bytes::{ByteArray, ByteSlice},
@@ -29,8 +29,16 @@ iter_wrapper!(IterableSuitPayload, SuitPayload<'a>);
 iter_wrapper!(IterableComponentIdentifier, SuitComponentIdentifier<'a>);
 iter_wrapper!(IterableByteSlice, &'a ByteSlice);
 iter_wrapper!(IterableU64, u64);
-iter_wrapper!(IterBstrSuitSharedSequence, BstrSuitSharedSequence<'a>);
-iter_wrapper!(IterBstrSuitCommandSequence, BstrSuitCommandSequence<'a>);
+iter_wrapper!(
+    IterBstrSuitSharedSequence,
+    BstrSuitSharedSequence<'a>,
+    validators::validate_try_each
+);
+iter_wrapper!(
+    IterBstrSuitCommandSequence,
+    BstrSuitCommandSequence<'a>,
+    validators::validate_try_each
+);
 iter_wrapper!(IterSuitTextComponentPair, SuitTextComponentPair<'a>);
 iter_wrapper!(IterSuitTagAndTextLmap, (Tag38LTag<'a>, SuitTextLMap<'a>));
 

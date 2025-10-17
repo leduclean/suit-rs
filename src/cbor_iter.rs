@@ -7,18 +7,20 @@ use minicbor::{Decode, Decoder};
 ///
 /// Used by [`ArrayIter`] to lazily decode CBOR arrays.
 #[derive(Debug)]
-pub(crate) struct CborIter<'b, T> {
+pub(crate) struct CborIter<'b, T: 'b> {
     bytes: &'b [u8],
     _marker: PhantomData<&'b T>,
 }
 
-impl<'b, T, Ctx> Decode<'b, Ctx> for CborIter<'b, T> {
+impl<'b, T, Ctx> Decode<'b, Ctx> for CborIter<'b, T>
+where
+    T: Decode<'b, ()>,
+{
     fn decode(d: &mut Decoder<'b>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
         let start = d.position();
         let input = d.input();
         // We advance the main decoder to the next element
         d.skip()?;
-
         let end = d.position();
         let inner = &input[start..end];
         Ok(CborIter {
