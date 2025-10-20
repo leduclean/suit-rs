@@ -11,10 +11,12 @@ mod suit_debug_log;
 
 mod bstr_struct;
 mod errors;
-mod flat_ops;
+mod flat_seq;
 mod suit_cose;
 mod suit_decode;
 mod suit_encode;
+
+pub mod handler;
 pub mod suit_manifest;
 
 pub use errors::SuitError;
@@ -32,7 +34,7 @@ pub use errors::SuitError;
 ///
 pub fn suit_decode<H>(data: &[u8], handler: &mut H) -> Result<(), SuitError>
 where
-    H: suit_manifest::SuitStartHandler,
+    H: handler::SuitStartHandler,
 {
     suit_decode::decode_and_dispatch(data, handler)
 }

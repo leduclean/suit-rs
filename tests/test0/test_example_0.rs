@@ -1,9 +1,8 @@
 use cbor_diag::{DataItem, parse_diag};
-use heapless::Vec;
 use std::fs;
 use suit_rs::SuitError;
+use suit_rs::handler::*;
 use suit_rs::suit_manifest;
-use suit_rs::suit_manifest::SUIT_MAX_ARRAY_LENGTH;
 
 const TEST_EXAMPLE_0_FILE: &str = "tests/test0/example_0.edn";
 
@@ -24,15 +23,15 @@ const IMAGE_SIZE: u64 = 34768;
 
 #[cfg(test)]
 pub struct SharedSequenceHandler;
-impl suit_manifest::SuitSharedSequenceHandler for SharedSequenceHandler {
+impl SuitSharedSequenceHandler for SharedSequenceHandler {
     fn on_commands<'a>(
         &mut self,
-        commands: Vec<suit_manifest::SuitSharedCommand<'a>, SUIT_MAX_ARRAY_LENGTH>,
+        commands: impl Iterator<Item = PairView<'a, suit_manifest::SuitSharedCommand<'a>>>,
     ) -> Result<(), SuitError> {
-        let mut cmd_iter = commands.iter();
+        let mut cmd_iter = commands;
         let first_cmd = cmd_iter.next().expect("First command missing");
 
-        match first_cmd {
+        match first_cmd.get().expect("Unvalid Format for first_cmd") {
             suit_manifest::SuitSharedCommand::OverrideParameters(params) => {
                 assert_eq!(
                     params
@@ -65,15 +64,23 @@ impl suit_manifest::SuitSharedSequenceHandler for SharedSequenceHandler {
         Ok(())
     }
 
-    fn on_conditions(
+    fn on_conditions<'a>(
         &mut self,
-        conditions: Vec<suit_manifest::SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
+        conditions: impl Iterator<Item = PairView<'a, suit_manifest::SuitCondition>>,
     ) -> Result<(), SuitError> {
-        let mut cond_iter = conditions.iter();
-        let first_cond = cond_iter.next().expect("First condition missing");
+        let mut cond_iter = conditions;
+        let first_cond = cond_iter
+            .next()
+            .expect("First condition missing")
+            .get()
+            .expect("Unvalid First Condition format");
         assert_eq!(first_cond.policy().bits(), 15);
 
-        let second_cond = cond_iter.next().expect("Second condition missing");
+        let second_cond = cond_iter
+            .next()
+            .expect("Second condition missing")
+            .get()
+            .expect("Unvalid Second Condition format");
         assert_eq!(second_cond.policy().bits(), 15);
 
         Ok(())
@@ -82,14 +89,17 @@ impl suit_manifest::SuitSharedSequenceHandler for SharedSequenceHandler {
 #[cfg(test)]
 pub struct ValidateHandler;
 
-impl suit_manifest::SuitCommandHandler for ValidateHandler {
+impl SuitCommandHandler for ValidateHandler {
     fn on_conditions<'a>(
         &mut self,
-        conditions: Vec<suit_manifest::SuitCondition, SUIT_MAX_ARRAY_LENGTH>,
+        conditions: impl Iterator<Item = PairView<'a, suit_manifest::SuitCondition>>,
     ) -> Result<(), SuitError> {
-        let first_condition = conditions
-            .first()
-            .expect("Expected at least one condition in validate command");
+        let mut cond_iter = conditions;
+        let first_condition = cond_iter
+            .next()
+            .expect("Expected at least one condition in validate command")
+            .get()
+            .unwrap();
 
         let policy = first_condition.policy();
 
@@ -102,36 +112,28 @@ impl suit_manifest::SuitCommandHandler for ValidateHandler {
         Ok(())
     }
 
-    fn on_customs<'a>(
-        &mut self,
-        _customs: Vec<suit_manifest::CommandCustomValue<'a>, SUIT_MAX_ARRAY_LENGTH>,
-    ) -> Result<(), SuitError> {
-        panic!("No custom values expected in validate sequence");
-    }
-
     fn on_directives<'a>(
         &mut self,
-        directives: Vec<suit_manifest::SuitDirective<'a>, SUIT_MAX_ARRAY_LENGTH>,
+        directives: impl Iterator<Item = PairView<'a, suit_manifest::SuitDirective<'a>>>,
     ) -> Result<(), SuitError> {
-        let first_directive = directives
-            .first()
-            .expect("Expected at least one directive in validate command");
+        let mut direct_iter = directives;
+        assert!(direct_iter.next().is_none());
+        Ok(())
+    }
 
-        let policy = first_directive.policy().expect("Expected directive policy");
-
-        assert_eq!(
-            policy.bits(),
-            2,
-            "Directive policy does not match expected policy"
-        );
-
+    fn on_customs<'a>(
+        &mut self,
+        customs: impl Iterator<Item = PairView<'a, suit_manifest::CommandCustomValue<'a>>>,
+    ) -> Result<(), SuitError> {
+        let mut custom_iter = customs;
+        assert!(custom_iter.next().is_none());
         Ok(())
     }
 }
 
 #[cfg(test)]
 pub struct StartHandler;
-impl suit_manifest::SuitStartHandler for StartHandler {
+impl SuitStartHandler for StartHandler {
     fn on_envelope<'a>(
         &mut self,
         envelope: suit_manifest::SuitEnvelope<'a>,

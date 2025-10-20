@@ -1,4 +1,3 @@
-use core::marker::PhantomData;
 use minicbor::{
     Decode, Decoder, Encode, Encoder, decode::Error as DecodeError, encode::Error as EncodeError,
 };
@@ -13,7 +12,7 @@ use crate::SuitError;
 #[derive(Debug)]
 pub(crate) struct BstrStruct<'a, T: 'a> {
     bytes: &'a [u8],
-    _ty: PhantomData<&'a T>,
+    _ty: core::marker::PhantomData<&'a T>,
 }
 
 impl<'a, 'bytes: 'a, T, Ctx> Decode<'bytes, Ctx> for BstrStruct<'a, T>
@@ -24,7 +23,7 @@ where
         let bytes: &'bytes [u8] = d.bytes()?;
         Ok(BstrStruct {
             bytes,
-            _ty: PhantomData,
+            _ty: core::marker::PhantomData,
         })
     }
 }
@@ -75,7 +74,6 @@ mod tests {
 
         let lazy = BstrStruct::<SuitCommandSequence>::decode(&mut d1, &mut ()).unwrap();
         let seq = lazy.get().unwrap();
-
         assert_eq!(
             seq.0.0,
             SuitCommandSequence::decode(&mut d2, &mut ()).unwrap().0.0
