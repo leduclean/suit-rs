@@ -8,15 +8,18 @@ extern crate alloc;
 // modules
 #[macro_use]
 mod suit_debug_log;
+#[macro_use]
+mod suit_macros;
 
 mod bstr_struct;
+mod cbor_iter;
 mod errors;
 mod flat_seq;
-mod suit_cose;
 mod suit_decode;
 mod suit_encode;
 
 pub mod handler;
+pub mod suit_cose;
 pub mod suit_manifest;
 
 pub use errors::SuitError;

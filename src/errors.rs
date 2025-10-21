@@ -19,6 +19,8 @@ enum ErrorImpl {
     OutOfSpace(usize),
     #[error("Unknow op: {0}")]
     UnknowOp(i64),
+    #[error("Indefinite length collection in entry")]
+    IndefiniteLength,
     #[error("Default Error")]
     #[default]
     Default,
@@ -38,6 +40,10 @@ impl SuitError {
         ErrorImpl::UnknowOp(op).into()
     }
 
+    pub fn indefinite_length() -> Self {
+        ErrorImpl::IndefiniteLength.into()
+    }
+
     pub fn is_decode_error(&self) -> bool {
         matches!(self.source, ErrorImpl::DecodeError(_))
     }
@@ -48,6 +54,10 @@ impl SuitError {
 
     pub fn is_out_of_space(&self) -> bool {
         matches!(self.source, ErrorImpl::OutOfSpace(_))
+    }
+
+    pub fn is_indefinite_length(&self) -> bool {
+        matches!(self.source, ErrorImpl::IndefiniteLength)
     }
 }
 
