@@ -1,11 +1,8 @@
 use crate::suit_cose::*;
 use crate::{bstr_struct::BstrStruct, errors::SuitError, flat_seq::FlatSequence};
-use minicbor::{
-    Decode, Encode,
-    bytes::{ByteArray, ByteSlice},
-};
+use minicbor::{Decode, Encode, bytes::ByteSlice};
 
-type Rfc4122Uuid = ByteArray<16>;
+type Rfc4122Uuid = [u8; 16];
 
 /* -------------------------------------------------------------------------- */
 /*                                bstr Wrappers                               */
@@ -59,8 +56,8 @@ pub struct SuitEnvelope<'a> {
 pub struct SuitPayload<'a> {
     #[n(0)]
     pub key: &'a str,
-    #[n(1)]
-    pub value: &'a ByteSlice,
+    #[cbor(n(1), with = "minicbor::bytes")]
+    pub value: &'a [u8],
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -96,14 +93,10 @@ pub enum SuitAuthenticationBlock<'a> {
 pub struct SuitDigest<'a> {
     #[n(0)]
     pub algorithm_id: SuitAlgorithmId,
-    #[n(1)]
-    bytes: &'a ByteSlice,
+    #[cbor(n(1), with = "minicbor::bytes")]
+    pub bytes: &'a [u8],
 }
-impl SuitDigest<'_> {
-    pub fn bytes(&self) -> &[u8] {
-        self.bytes.as_ref()
-    }
-}
+
 #[derive(Debug, Encode, Decode)]
 #[cbor(index_only)]
 pub enum SuitAlgorithmId {
@@ -176,8 +169,8 @@ pub struct SuitSeverableManifestMembers<'a> {
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
 pub struct SuitIntegratedPayload<'a> {
-    #[n(0)]
-    pub key: &'a ByteSlice,
+    #[cbor(n(0), with = "minicbor::bytes")]
+    pub key: &'a [u8],
     #[n(1)]
     pub value: &'a str,
 }
@@ -379,11 +372,10 @@ pub struct SuitDirectiveTryEachArgument<'a>(#[cbor(borrow)] pub IterBstrSuitComm
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
 pub struct SuitParameters<'a> {
-    #[n(1)]
-    #[cbor(decode_with = "crate::suit_decode::decode_uuid_or_cborpen")]
-    vendor_identifier: Option<&'a ByteSlice>, // Rfc4122Uuid / cbor-pen
-    #[n(2)]
-    class_identifier: Option<Rfc4122Uuid>,
+    #[cbor(n(1), decode_with = "crate::suit_decode::decode_uuid_or_cborpen")]
+    pub vendor_identifier: Option<&'a [u8]>, // Rfc4122Uuid / cbor-pen
+    #[cbor(n(2), with = "minicbor::bytes")]
+    pub class_identifier: Option<Rfc4122Uuid>,
     #[b(3)] // We borrow the bstr
     pub image_digest: Option<BstrSuitDigest<'a>>,
     #[n(5)]
@@ -394,28 +386,19 @@ pub struct SuitParameters<'a> {
     pub soft_failure: Option<bool>,
     #[n(14)]
     pub image_size: Option<u64>,
-    #[n(18)]
-    pub content: Option<&'a ByteSlice>,
+    #[cbor(n(18), with = "minicbor::bytes")]
+    pub content: Option<&'a [u8]>,
     #[n(21)]
     pub uri: Option<&'a str>,
     #[n(22)]
     pub source_component: Option<u64>,
-    #[n(23)]
-    pub invoke_args: Option<&'a ByteSlice>,
+    #[cbor(n(23), with = "minicbor::bytes")]
+    pub invoke_args: Option<&'a [u8]>,
     #[n(24)]
     pub device_identifier: Option<Rfc4122Uuid>,
-    #[n(25)]
-    pub fetch_args: Option<&'a ByteSlice>,
+    #[cbor(n(25), with = "minicbor::bytes")]
+    pub fetch_args: Option<&'a [u8]>,
     // custom: Option<CustomParameterValue,
-}
-
-impl SuitParameters<'_> {
-    pub fn vendor_identifier(&self) -> Option<&[u8]> {
-        self.vendor_identifier.map(|b| b.as_ref())
-    }
-    pub fn class_identifier(&self) -> Option<&[u8; 16]> {
-        self.class_identifier.as_ref().map(|b| b.as_ref())
-    }
 }
 
 // #[derive(Debug, Clone, Encode, Decode)]

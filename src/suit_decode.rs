@@ -4,7 +4,6 @@ use crate::handler::*;
 use crate::suit_cose::*;
 use crate::suit_manifest::*;
 use core::str;
-use minicbor::bytes::ByteSlice;
 use minicbor::{Decode, Decoder, data::Type, decode::Error as DecodeError};
 
 const SUIT_MAX_FLAT_PAIR: usize = 20;
@@ -133,7 +132,7 @@ pub(crate) fn decode_uuid_or_cborpen<'a, Ctx>(
     // TODO: refactor by using [cbor(tag=112)] in new VendorIdentifier type
     d: &mut Decoder<'a>,
     _ctx: &mut Ctx,
-) -> Result<Option<&'a ByteSlice>, DecodeError> {
+) -> Result<Option<&'a [u8]>, DecodeError> {
     let ty = d.datatype()?;
     match ty {
         Type::Tag => {
@@ -145,14 +144,17 @@ pub(crate) fn decode_uuid_or_cborpen<'a, Ctx>(
                         "UUID is too long (more than 16 bytes)",
                     ))
                 } else {
-                    Ok(Some(<&ByteSlice>::from(b)))
+                    Ok(Some(b))
                 }
             } else {
                 Err(minicbor::decode::Error::type_mismatch(ty)
                     .with_message("UUID/CborPen: unexpected tag"))
             }
         }
-        Type::Bytes => Ok(Some(d.bytes().map(<&ByteSlice>::from)?)),
+        Type::Bytes => {
+            let b = d.bytes()?;
+            Ok(Some(b))
+        }
         _ => Err(minicbor::decode::Error::type_mismatch(ty)
             .with_message("UUID/CborPen: expected UUID or cbor-pen")),
     }

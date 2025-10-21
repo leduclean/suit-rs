@@ -34,13 +34,11 @@ impl SuitSharedSequenceHandler for SharedSequenceHandler {
         match first_cmd.get().expect("Unvalid Format for first_cmd") {
             suit_manifest::SuitSharedCommand::OverrideParameters(params) => {
                 assert_eq!(
-                    params
-                        .vendor_identifier()
-                        .expect("Vendor identifier missing"),
+                    params.vendor_identifier.expect("Vendor identifier missing"),
                     VENDOR_ID_BYTES
                 );
                 assert_eq!(
-                    params.class_identifier().expect("Class identifier missing"),
+                    params.class_identifier.expect("Class identifier missing"),
                     CLASS_ID_BYTES
                 );
                 assert_eq!(params.image_size.expect("Image size missing"), IMAGE_SIZE);
@@ -56,7 +54,7 @@ impl SuitSharedSequenceHandler for SharedSequenceHandler {
                     digest.algorithm_id,
                     suit_manifest::SuitAlgorithmId::Sha256
                 ));
-                assert_eq!(digest.bytes(), DIGEST_BYTES);
+                assert_eq!(digest.bytes, DIGEST_BYTES);
             }
             _ => panic!("Expected first command to be OverrideParameters"),
         }
