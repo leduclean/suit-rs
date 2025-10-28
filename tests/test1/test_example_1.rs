@@ -16,6 +16,8 @@ const DIGEST_BYTES: &[u8] = &[
     0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10,
 ];
 
+const URI: &str = "http://example.com/file.bin";
+
 const IMAGE_SIZE: u64 = 34768;
 
 #[cfg(test)]
@@ -28,7 +30,7 @@ impl SuitSharedSequenceHandler for SharedSequenceHandler {
         let mut cmd_iter = commands;
         let first_cmd = cmd_iter.next().expect("First command missing");
 
-        match first_cmd.get().expect("Unvalid Format for first_cmd") {
+        match first_cmd.get().expect("Invalid Format for first_cmd") {
             suit_manifest::SuitSharedCommand::OverrideParameters(params) => {
                 assert_eq!(
                     params.vendor_identifier.expect("Vendor identifier missing"),
@@ -68,19 +70,89 @@ impl SuitSharedSequenceHandler for SharedSequenceHandler {
             .next()
             .expect("First condition missing")
             .get()
-            .expect("Unvalid First Condition format");
+            .expect("Invalid First Condition format");
         assert_eq!(first_cond.policy().bits(), 15);
 
         let second_cond = cond_iter
             .next()
             .expect("Second condition missing")
             .get()
-            .expect("Unvalid Second Condition format");
+            .expect("Invalid Second Condition format");
         assert_eq!(second_cond.policy().bits(), 15);
 
         Ok(())
     }
 }
+
+#[cfg(test)]
+pub struct InstallHandler;
+impl SuitCommandHandler for InstallHandler {
+    fn on_conditions<'a>(
+        &mut self,
+        conditions: impl Iterator<Item = PairView<'a, suit_manifest::SuitCondition>>,
+    ) -> Result<(), SuitError> {
+        let mut cond_iter = conditions;
+        let first_condition = cond_iter
+            .next()
+            .expect("Expected at least one condition in install command")
+            .get()
+            .unwrap();
+
+        let policy = first_condition.policy();
+
+        assert_eq!(
+            policy.bits(),
+            15,
+            "Condition policy does not match expected install policy"
+        );
+
+        Ok(())
+    }
+
+    fn on_directives<'a>(
+        &mut self,
+        directives: impl Iterator<Item = PairView<'a, suit_manifest::SuitDirective<'a>>>,
+    ) -> Result<(), SuitError> {
+        let mut direct_iter = directives;
+        let first_directive = direct_iter
+            .next()
+            .expect("Expected at least one directive in install command")
+            .get()
+            .expect("Failed to decode first directive");
+
+        if let suit_manifest::SuitDirective::OverrideParameters(params) = first_directive {
+            assert_eq!(params.uri.expect("URI missing"), URI);
+        } else {
+            panic!("Expected first directive to be OverrideParameters");
+        }
+
+        let second_directive = direct_iter
+            .next()
+            .expect("Expected second directive in install command")
+            .get()
+            .expect("Failed to decode second directive");
+
+        assert_eq!(
+            second_directive
+                .policy()
+                .expect("Failed to get policy")
+                .bits(),
+            2
+        );
+
+        Ok(())
+    }
+
+    fn on_customs<'a>(
+        &mut self,
+        customs: impl Iterator<Item = PairView<'a, suit_manifest::CommandCustomValue<'a>>>,
+    ) -> Result<(), SuitError> {
+        let mut custom_iter = customs;
+        assert!(custom_iter.next().is_none());
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 pub struct ValidateHandler;
 
@@ -145,20 +217,21 @@ impl SuitStartHandler for StartHandler {
 
         assert_eq!(manifest.version, 1, "Manifest version mismatch");
         assert_eq!(
-            manifest.sequence_number, 0,
+            manifest.sequence_number, 1,
             "Manifest sequence number mismatch"
         );
 
         let common = manifest.common.get().expect("Failed to get common fields");
-        let component = common
-            .components
-            .get()
-            .expect("Valid Format")
+
+        let mut component_iter = common.components.get().expect("Valid Format");
+
+        // Check first component slices
+        let first_component = component_iter
             .next()
             .expect("Expected at least one component")
             .expect("Expected valid first component");
         assert_eq!(
-            component
+            first_component
                 .get()
                 .expect("Valid Format")
                 .next()
@@ -166,6 +239,10 @@ impl SuitStartHandler for StartHandler {
                 .expect("Expected valid first slice")
                 .as_ref(),
             &[0]
+        );
+        assert!(
+            component_iter.next().is_none(),
+            "Expected only one component"
         );
 
         // Dispatch the shared sequence handler
@@ -184,6 +261,19 @@ impl SuitStartHandler for StartHandler {
             .expect("Failed to get validate section");
         validate.decode_and_dispatch(&mut ValidateHandler)?;
 
+        // Dispatch the install handler
+        let install = manifest.install.expect("Install section missing");
+
+        match install {
+            suit_manifest::DigestOrCbor::Cbor(bstr_command_seq) => {
+                let install_seq = bstr_command_seq
+                    .get()
+                    .expect("Failed to get install command sequence");
+                install_seq.decode_and_dispatch(&mut InstallHandler)?;
+            }
+            _ => panic!("Expected install section to be CBOR command sequence"),
+        }
+
         Ok(())
     }
 
@@ -196,9 +286,9 @@ impl SuitStartHandler for StartHandler {
 }
 
 #[test]
-fn test_decode_example_0() {
+fn test_decode_example_1() {
     // Read CBOR test file
-    let cbor_item = parse_diag(include_str!("example_0.edn")).unwrap();
+    let cbor_item = parse_diag(include_str!("example_1.edn")).unwrap();
 
     // Decode the SUIT manifest
     suit_rs::suit_decode(cbor_item.to_bytes().as_slice(), &mut StartHandler)
