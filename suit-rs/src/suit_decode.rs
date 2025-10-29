@@ -252,6 +252,7 @@ where
             // The SUIT_DIGEST is computed over the bstr-wrapped SUIT_Manifest bytes
             authentication.suit_verify_digest(envelope.manifest.raw_bytes())?;
 
+            authentication.suit_verify_cose(keys)?;
             handler.on_envelope(envelope)
         }
         1070 => {

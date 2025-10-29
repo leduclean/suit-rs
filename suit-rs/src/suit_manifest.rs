@@ -1,5 +1,5 @@
 use crate::{SuitError, flat_seq::FlatSequence};
-use cose_minicbor::cose::{CoseMac0, CoseSign, CoseSign1};
+use cose_minicbor::cose::{CoseSign, CoseSign1};
 use minicbor::{Decode, Decoder, Encode, bytes::ByteSlice, decode};
 use suit_cbor::{bstr_wrapper, errors::CborError, iter_wrapper};
 
@@ -71,6 +71,27 @@ pub(crate) struct SuitAuthentication<'a> {
 }
 
 impl SuitAuthentication<'_> {
+    /// Verify the cose signature of the authentication block.
+    pub(crate) fn suit_verify_cose(&self, keys: &[u8]) -> Result<(), SuitError> {
+        let mut d = Decoder::new(self.authentication_block);
+        let tag = d.tag()?;
+        match tag.as_u64() {
+            18 => {
+                let sign1: CoseSign1 = d.decode()?;
+                sign1.suit_verify_cose_sign1(Some(self.digest), keys)?;
+                Ok(())
+            }
+            98 => {
+                let sign: CoseSign = d.decode()?;
+                sign.suit_verify_cose_sign(Some(self.digest), keys)?;
+                Ok(())
+            }
+            _ => Err(minicbor::decode::Error::tag_mismatch(tag)
+                .with_message("SuitAuthenticationBlock: unexpected tag value")
+                .into()),
+        }
+    }
+
     /// Verify the digest of the [`SuitAuthentication`] block (computed) over bstr wrapped
     ///  [`SuitEnvelope::manifest`] bytes.
     pub(crate) fn suit_verify_digest(&self, manifest_bytes: &[u8]) -> Result<(), SuitError> {

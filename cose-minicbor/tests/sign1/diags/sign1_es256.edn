@@ -1,0 +1,12 @@
+/ ietf-suit-manifest authentication part of Examples Appendix C /
+[
+    / protected / << {
+        / alg / 1:-7 / "ES256" /
+    } >>,
+    / unprotected / {
+    },
+    / payload / null / nil /,
+    / signature / h'408d0816f9b510749bf6a51b066951e08a4438
+    f849eb092a1ac768eed9de696c1b1dd35d82ef149e6a73a61976ad2cfe78444b806429
+    3350a122f332cb49f0da'
+]

@@ -1,5 +1,9 @@
+use crate::errors::{CoseError, ErrorImpl};
+use crate::verify;
 use minicbor::{Decode, Encode};
 use suit_cbor::{bstr_wrapper, iter_wrapper};
+
+const MAX_SUPPORTED_ACCESSTOKEN_LEN: usize = 256;
 
 /// HeaderMap as described in RCF 9052.
 ///
@@ -98,6 +102,33 @@ struct Sig1Structure<'a> {
     payload: &'a [u8],
 }
 
+impl CoseSign1<'_> {
+    /// Verification process for a single signature detailled in 4.4 of RFC 9052.
+    ///
+    /// Only supports the ES256, Ed25519 and hss algs for now.
+    pub fn suit_verify_cose_sign1(
+        &self,
+        payload_buf: Option<&[u8]>,
+        keys: &[u8],
+    ) -> Result<(), CoseError> {
+        let headers = self.unprotected.updated_with(&self.protected.get()?);
+        let payload = match self.payload {
+            Some(p) => p,
+            None => payload_buf.ok_or(ErrorImpl::MissingPayload)?,
+        };
+
+        let aad = Sig1Structure {
+            context: "Signature1",
+            body_protected: self.protected.inner_bytes()?,
+            external_aad: &[],
+            payload,
+        };
+        let mut signed_data = heapless::Vec::<u8, MAX_SUPPORTED_ACCESSTOKEN_LEN>::new();
+        minicbor::encode(aad, minicbor_adapters::WriteToHeapless(&mut signed_data))?;
+        verify::verify_cose_sign(keys, &signed_data, headers, self.signature)
+    }
+}
+
 iter_wrapper!(IterCoseSignature, CoseSignature<'a>);
 
 /// A `COSE_Sign` structure to handle multiple signature as defined in [RFC 9052](https://www.rfc-editor.org/rfc/rfc9052.html)
@@ -142,6 +173,38 @@ struct SigStructure<'a> {
     external_aad: &'a [u8],
     #[cbor(b(4), with = "minicbor::bytes")]
     payload: &'a [u8],
+}
+
+impl CoseSign<'_> {
+    /// Verification process for multiple signature detailled in 4.4 of RFC 9052.
+    ///
+    /// Only supports the ES256, Ed25519 and hss algs for now.
+    pub fn suit_verify_cose_sign(
+        &self,
+        payload_buf: Option<&[u8]>,
+        keys: &[u8],
+    ) -> Result<(), CoseError> {
+        let payload = match self.payload {
+            Some(p) => p,
+            None => payload_buf.ok_or(ErrorImpl::MissingPayload)?,
+        };
+        self.signature
+            .get()?
+            .filter_map(Result::ok)
+            .try_for_each(|sign| -> Result<(), CoseError> {
+                let headers = sign.unprotected.updated_with(&sign.protected.get()?);
+                let aad = SigStructure {
+                    context: "Signature",
+                    body_protected: self.protected.inner_bytes()?,
+                    sign_protected: sign.protected.inner_bytes()?,
+                    external_aad: &[],
+                    payload,
+                };
+                let mut to_be_signed = heapless::Vec::<u8, MAX_SUPPORTED_ACCESSTOKEN_LEN>::new();
+                minicbor::encode(aad, minicbor_adapters::WriteToHeapless(&mut to_be_signed))?;
+                verify::verify_cose_sign(keys, &to_be_signed, headers, sign.signature)
+            })
+    }
 }
 
 iter_wrapper!(IterCoseRecipient, CoseRecipient<'a>);
