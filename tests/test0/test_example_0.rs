@@ -111,8 +111,7 @@ impl SuitCommandHandler for ValidateHandler {
         &mut self,
         directives: impl Iterator<Item = PairView<'a, suit_manifest::SuitDirective<'a>>>,
     ) -> Result<(), SuitError> {
-        let mut direct_iter = directives;
-        assert!(direct_iter.next().is_none());
+        assert!(directives.peekable().peek().is_none());
         Ok(())
     }
 
@@ -120,8 +119,7 @@ impl SuitCommandHandler for ValidateHandler {
         &mut self,
         customs: impl Iterator<Item = PairView<'a, suit_manifest::CommandCustomValue<'a>>>,
     ) -> Result<(), SuitError> {
-        let mut custom_iter = customs;
-        assert!(custom_iter.next().is_none());
+        assert!(customs.peekable().peek().is_none());
         Ok(())
     }
 }
