@@ -1,4 +1,5 @@
 use crate::errors::{CoseError, ErrorImpl};
+use crate::keys::{CoseKeySet, KeyMaterial, KeyOp, KeyType};
 use crate::verify;
 use minicbor::{Decode, Encode};
 use suit_cbor::{bstr_wrapper, iter_wrapper};
@@ -242,6 +243,51 @@ struct MacStructure<'a> {
     // The full payload is used here
     #[cbor(b(3), with = "minicbor::bytes")]
     payload: &'a [u8],
+}
+
+impl CoseMac0<'_> {
+    /// Verification process for a [`CoseMac0`] (ie: a MAC with implicit Key) as detailled in 6.3 of RFC 9052.
+    pub fn suit_verify_mac0(
+        &self,
+        payload_buf: Option<&[u8]>,
+        keys: &[u8],
+    ) -> Result<(), CoseError> {
+        let headers = self.unprotected.updated_with(&self.protected.get()?);
+
+        let payload = match self.payload {
+            Some(p) => p,
+            None => payload_buf.ok_or(ErrorImpl::MissingPayload)?,
+        };
+
+        let aad = MacStructure {
+            context: "MAC0",
+            body_protected: self.protected.inner_bytes()?,
+            external_aad: &[],
+            payload,
+        };
+        let mut to_be_maced = heapless::Vec::<u8, MAX_SUPPORTED_ACCESSTOKEN_LEN>::new();
+        minicbor::encode(aad, minicbor_adapters::WriteToHeapless(&mut to_be_maced))?;
+
+        let key_set: CoseKeySet = minicbor::decode(keys)?;
+        if let KeyMaterial::Symmetric(key) = key_set.match_and_get_key(
+            KeyType::Symmetric,
+            headers.alg,
+            KeyOp::MACVerify,
+            headers.kid,
+        )? {
+            if !matches!(
+                headers.alg,
+                Some(CoseAlg::HMAC256256) | Some(CoseAlg::HMAC25664)
+            ) {
+                Err(ErrorImpl::UnexpectedMacAlg.into())
+            } else {
+                verify::verify_mac(key, &to_be_maced, self.tag)
+            }
+        } else {
+            // We should get the correct material
+            Err(ErrorImpl::UnvalidKeySet.into())
+        }
+    }
 }
 
 /// `Cose_MAC` as described in RCF 9052 6.2.

@@ -1,0 +1,7 @@
+/cose-wg HMAC-enc 05 HMAC-ENC-05: Direct key + HMAC-SHA256_64 - implicit/
+[
+    /protected/ h'A10104',
+    /unprotected/ {},
+    /payload/ h'546869732069732074686520636F6E74656E742E',
+    /tag/ h'11F9E357975FB849'
+]
