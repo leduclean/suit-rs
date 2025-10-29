@@ -1,4 +1,6 @@
 use cbor_diag::parse_diag;
+use cose_minicbor::keys::{CoseAlg, Curve};
+use cose_minicbor::keys::{CoseKey, CoseKeySetBuilder, KeyType};
 use suit_rs::SuitError;
 use suit_rs::handler::*;
 use suit_rs::suit_manifest;
@@ -195,7 +197,27 @@ fn test_decode_example_0() {
     // Read CBOR test file
     let cbor_item = parse_diag(include_str!("example_0.edn")).unwrap();
 
+    // Initialize key set
+    let mut cose_key_builder: CoseKeySetBuilder<100> =
+        CoseKeySetBuilder::try_new().expect("valid builder");
+    let mut key = CoseKey::new(KeyType::Ec2);
+    key.alg(CoseAlg::ES256);
+    key.crv(Curve::P256).unwrap();
+    key.x(&hex_literal::hex!(
+        "8496811aae0baaabd26157189eecda26beaa8bf11b6f3fe6e2b5659c85dbc0ad"
+    ))
+    .expect("X unvalid");
+    key.y(&hex_literal::hex!(
+        "3b1f2a4b6c098131c0a36dacd1d78bd381dcdfb09c052db33991db7338b4a896"
+    ))
+    .expect("Y unvalid");
+    cose_key_builder.push_key(key).expect("Key Set is full");
+    let key_bytes = cose_key_builder.into_bytes().expect("Bytes should be okay");
     // Decode the SUIT manifest
-    suit_rs::suit_decode(cbor_item.to_bytes().as_slice(), &mut StartHandler, &[])
-        .expect("Decoding failed");
+    suit_rs::suit_decode(
+        cbor_item.to_bytes().as_slice(),
+        &mut StartHandler,
+        &key_bytes,
+    )
+    .expect("Decoding failed");
 }

@@ -1,4 +1,5 @@
 #![no_std]
+use cose_minicbor::keys::{CoseAlg, CoseKey, CoseKeySetBuilder, KeyType};
 use suit_rs::handler::*;
 use suit_rs::{SuitError, suit_decode, suit_manifest::*};
 struct DemoHandler;
@@ -78,7 +79,14 @@ h'00112233445566778899aabbccddeeff0123456789abcdeffedcba9876543210'
     );
 
     let mut handler = DemoHandler;
+    let mut key_set_builder: CoseKeySetBuilder<100> = CoseKeySetBuilder::try_new()?;
+    let mut key = CoseKey::new(KeyType::Ec2);
+    key.alg(CoseAlg::ES256P256);
+    key.x(b"x coordinate")?;
+    key.y(b"y coordinate")?;
+    key_set_builder.push_key(key)?;
+    let key_set_bytes = key_set_builder.into_bytes()?;
 
-    suit_decode(&example1, &mut handler, &[])?;
+    suit_decode(&example1, &mut handler, &key_set_bytes)?;
     Ok(())
 }
