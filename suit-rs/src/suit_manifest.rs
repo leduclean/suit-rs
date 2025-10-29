@@ -1,5 +1,5 @@
 use crate::{SuitError, flat_seq::FlatSequence};
-use cose_minicbor::cose::{CoseSign, CoseSign1};
+use cose_minicbor::cose::{CoseSign, CoseSign1, CoseMac0};
 use minicbor::{Decode, Decoder, Encode, bytes::ByteSlice, decode};
 use suit_cbor::{bstr_wrapper, errors::CborError, iter_wrapper};
 
@@ -76,6 +76,11 @@ impl SuitAuthentication<'_> {
         let mut d = Decoder::new(self.authentication_block);
         let tag = d.tag()?;
         match tag.as_u64() {
+            17 => {
+                let mac0: CoseMac0 = d.decode()?;
+                mac0.suit_verify_mac0(Some(self.digest), keys)?;
+                Ok(())
+            }
             18 => {
                 let sign1: CoseSign1 = d.decode()?;
                 sign1.suit_verify_cose_sign1(Some(self.digest), keys)?;
