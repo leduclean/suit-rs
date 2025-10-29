@@ -1,0 +1,18 @@
+/ HS256 with A128KW /
+[
+    /protected/ h'A10105',
+    /unprotected/{},
+    /payload/ h'546869732069732074686520636F6E74656E742E',
+    /tag/ h'2bdcc89f058216b8a208ddc6d8b54aa91f48bd63484986565105c9ad5a6682f6',
+    /recipients/ [
+        [
+            /protected/ h'',
+            /unprotected/ {
+                /alg/ 1: -3,
+                /kid/ 4: h'6F75722D736563726574'
+            },
+            /ciphertext/ h'45f19543a4ea912e07fa280d14f7397da96f446a0246d983cd3457e038aec3e21fc286f139d1edd2'
+        ]
+    ]
+
+]
