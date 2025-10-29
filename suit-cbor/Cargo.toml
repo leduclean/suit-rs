@@ -1,0 +1,11 @@
+[package]
+name = "suit-cbor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+minicbor = { version = "2.1.1", default-features = false, features = ["derive"] }
+thiserror = { version = "2.0.17", default-features = false }
+
+cbor-macro = { version = "0.1.0", default-features = false }
+cboritem = { version = "0.1.3", default-features = false }

@@ -1,7 +1,6 @@
 use crate::errors::SuitError;
 use crate::flat_seq::*;
 use crate::handler::*;
-use crate::suit_cose::*;
 use crate::suit_manifest::*;
 use core::str;
 use minicbor::{Decode, Decoder, data::Type, decode::Error as DecodeError};
@@ -23,29 +22,6 @@ where
         info!("Shared sequence raw: {}", display(bytes));
         let inner = T::decode(d, &mut ())?;
         Ok(Debug(inner))
-    }
-}
-
-impl<'a, Ctx> Decode<'a, Ctx> for SuitAuthenticationBlock<'a> {
-    fn decode(d: &mut Decoder<'a>, _ctx: &mut Ctx) -> Result<Self, DecodeError> {
-        let tag = d.tag()?;
-        match tag.as_u64() {
-            98 => Ok(SuitAuthenticationBlock::Sign(
-                d.decode_with::<Ctx, CoseSign>(_ctx)?,
-            )),
-            18 => Ok(SuitAuthenticationBlock::Sign1(
-                d.decode_with::<Ctx, CoseSign1>(_ctx)?,
-            )),
-            97 => Ok(SuitAuthenticationBlock::Mac(
-                d.decode_with::<Ctx, CoseMac>(_ctx)?,
-            )),
-            17 => Ok(SuitAuthenticationBlock::Mac0(
-                d.decode_with::<Ctx, CoseMac0>(_ctx)?,
-            )),
-
-            _ => Err(minicbor::decode::Error::tag_mismatch(tag)
-                .with_message("SuitAuthenticationBlock: unexpected tag value")),
-        }
     }
 }
 
@@ -254,17 +230,28 @@ impl<'a> SuitCommandSequence<'a> {
 }
 
 /// Starting entry point to decode a SUIT structure and dispatch the decoded items to the handler.
-pub(crate) fn decode_and_dispatch<H>(buf: &[u8], handler: &mut H) -> Result<(), SuitError>
+/// It also perform a suit-authentification cryptographic computation if the manifest is authenticated
+pub(crate) fn decode_and_dispatch<H>(
+    buf: &[u8],
+    handler: &mut H,
+    keys: &[u8],
+) -> Result<(), SuitError>
 where
     H: SuitStartHandler,
 {
-    // on match ici sur le tag qui nous permet d'identifier la variante mais ca serait la meme chose avec des champs à type multiple.
     let mut d = Decoder::new(buf);
     let tag = d.tag()?;
     let ctx = &mut ();
     match tag.as_u64() {
         107 => {
-            let envelope = d.decode_with(ctx)?;
+            let envelope: SuitEnvelope<'_> = d.decode_with(ctx)?;
+            let authentication = envelope.wrapper.get()?;
+
+            // 8.3 ietf suit manifest
+            // MUST verify the SUIT_Digest prior to performing the cryptographic computation to avoid "Time-of-check to time-of-use"
+            // The SUIT_DIGEST is computed over the bstr-wrapped SUIT_Manifest bytes
+            authentication.suit_verify_digest(envelope.manifest.raw_bytes())?;
+
             handler.on_envelope(envelope)
         }
         1070 => {
@@ -277,6 +264,7 @@ where
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     #[allow(unused_imports)]

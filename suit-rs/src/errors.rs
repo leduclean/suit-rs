@@ -6,21 +6,40 @@ use thiserror::Error;
 pub struct SuitError {
     ctx: &'static str,
     #[source]
-    source: ErrorImpl,
+    pub(crate) source: ErrorImpl,
 }
 
 #[derive(Error, Debug, Default)]
-enum ErrorImpl {
+pub(crate) enum ErrorImpl {
     #[error(transparent)]
     DecodeError(#[from] minicbor::decode::Error),
+
+    #[error(transparent)]
+    EncodeError(#[from] minicbor::encode::Error<heapless::CapacityError>),
+
+    #[error(transparent)]
+    CborError(#[from] suit_cbor::errors::CborError),
+
+    #[error(transparent)]
+    CoseError(#[from] cose_minicbor::errors::CoseError),
+
     #[error(transparent)]
     Utf8(#[from] Utf8Error),
+
+    #[error("Invalid Digest")]
+    InvalidDigest,
+
+    #[error(
+        "Unexpected alg for digest verifying, found alg id {0}, (only SHA256, SHA384 and SHA521 are supported)"
+    )]
+    UnexpectedHashAlg(i32),
+
     #[error("Vec overflow, capacity was {0}")]
     OutOfSpace(usize),
+
     #[error("Unknow op: {0}")]
     UnknowOp(i64),
-    #[error("Indefinite length collection in entry")]
-    IndefiniteLength,
+
     #[error("Default Error")]
     #[default]
     Default,
@@ -40,8 +59,12 @@ impl SuitError {
         ErrorImpl::UnknowOp(op).into()
     }
 
-    pub fn indefinite_length() -> Self {
-        ErrorImpl::IndefiniteLength.into()
+    pub fn unexpected_hash_alg(id: i32) -> Self {
+        ErrorImpl::UnexpectedHashAlg(id).into()
+    }
+
+    pub fn invalid_digest() -> Self {
+        ErrorImpl::InvalidDigest.into()
     }
 
     pub fn is_decode_error(&self) -> bool {
@@ -54,10 +77,6 @@ impl SuitError {
 
     pub fn is_out_of_space(&self) -> bool {
         matches!(self.source, ErrorImpl::OutOfSpace(_))
-    }
-
-    pub fn is_indefinite_length(&self) -> bool {
-        matches!(self.source, ErrorImpl::IndefiniteLength)
     }
 }
 
