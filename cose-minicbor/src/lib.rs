@@ -50,3 +50,4 @@ pub mod cose;
 pub mod errors;
 pub mod keys;
 mod multitype;
+mod verify;
