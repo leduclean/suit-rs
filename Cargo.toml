@@ -1,30 +1,8 @@
-[package]
-name = "suit-rs"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members  = [
+  "suit-rs",
+  "cose-minicbor",
+  "suit-cbor",
+]
 
-[features]
-# pure no_alloc
-default = []
-# required for host building
-std = []
-host = ["std"]
-# Not yet implemented
-alloc = ["minicbor/alloc", "minicbor/half"]
-defmt = ["dep:defmt"]
-
-[dev-dependencies]
-rusty-hook = "^0.11.2"
-[dependencies]
-bitflags = { version = "2.9.4", default-features = false, features = ["serde"] }
-cbor-diag = "0.1.12"
-cbor-macro = { version = "0.1.0", default-features = false }
-cboritem = { version = "0.1.3", default-features = false }
-defmt = { version = "1.0.1", optional = true }
-heapless = { version = "0.8.0", default-features = false }
-hex-literal = { version = "1.0.0", default-features = false }
-minicbor = { version = "2.1.1", default-features = false, features = ["derive"] }
-once_cell = { version = "=1.19.0", default-features = false, features = [
-  "critical-section",
-] }
-thiserror = { version = "2.0.17", default-features = false }
+resolver = "2"

@@ -1,22 +1,22 @@
-use crate::suit_cose::*;
-use crate::{bstr_struct::BstrStruct, errors::SuitError, flat_seq::FlatSequence};
-use minicbor::{Decode, Encode, bytes::ByteSlice};
+use crate::{SuitError, flat_seq::FlatSequence};
+use cose_minicbor::cose::{CoseMac0, CoseSign, CoseSign1};
+use minicbor::{Decode, Decoder, Encode, bytes::ByteSlice, decode};
+use suit_cbor::{bstr_wrapper, errors::CborError, iter_wrapper};
 
 type Rfc4122Uuid = [u8; 16];
 
 /* -------------------------------------------------------------------------- */
-/*                                bstr Wrappers                               */
+/*                    bstr Wrappers exposed to the public api                 */
 /* -------------------------------------------------------------------------- */
-bstr_wrapper!(BstrSuitDigest, SuitDigest<'a>);
-bstr_wrapper!(BstrSuitAuthenticationBlock, SuitAuthenticationBlock<'a>);
 bstr_wrapper!(BstrSuitAuthentication, SuitAuthentication<'a>);
+bstr_wrapper!(BstrSuitDigest, SuitDigest<'a>);
 bstr_wrapper!(BstrSuitCommon, SuitCommon<'a>);
 bstr_wrapper!(BstrSuitCommandSequence, SuitCommandSequence<'a>);
 bstr_wrapper!(BstrSuitTextMap, SuitTextMap<'a>);
 bstr_wrapper!(BstrSuitManifest, SuitManifest<'a>);
 bstr_wrapper!(BstrSuitSharedSequence, SuitSharedSequence<'a>);
 /* -------------------------------------------------------------------------- */
-/*                                lazy iterable element Wrappers               */
+/*             lazy iterable element Wrappers exposed to the public api       */
 /* -------------------------------------------------------------------------- */
 iter_wrapper!(
     IterableSuitSeverableManifestMember,
@@ -43,7 +43,7 @@ pub struct Debug<T>(pub T);
 #[cbor(map)]
 pub struct SuitEnvelope<'a> {
     #[b(2)] // we borrow a bstr so we need #[b()] instead of #[n()]
-    pub wrapper: BstrSuitAuthentication<'a>,
+    pub(crate) wrapper: BstrSuitAuthentication<'a>,
     #[b(3)]
     pub manifest: BstrSuitManifest<'a>,
     #[n(4)]
@@ -60,48 +60,37 @@ pub struct SuitPayload<'a> {
     pub value: &'a [u8],
 }
 
+/// ? should it stay private or we should support independent SuitAuthentication process by user ?
 #[derive(Debug, Encode, Decode)]
 #[cbor(array)]
-pub struct SuitAuthentication<'a> {
-    #[b(0)] // we borrow a bstr so we need #[b()] instead of #[n()]
-    pub digest: BstrSuitDigest<'a>,
-    #[b(1)]
-    pub authentications_keys: Option<BstrSuitAuthenticationBlock<'a>>, //TODO  zero or more
+pub(crate) struct SuitAuthentication<'a> {
+    #[cbor(b(0), with = "minicbor::bytes")] // we will treat it directly so Bstr is not needed
+    digest: &'a [u8],
+    #[cbor(b(1), with = "minicbor::bytes")] // we will treat it directly so Bstr is not needed
+    authentication_block: &'a [u8], // we only support one authentication block
 }
 
-#[derive(Debug, Encode)]
-pub enum SuitAuthenticationBlock<'a> {
-    /// COSE_Sign_Tagged (tag 98)
-    #[n(0)]
-    Sign(#[n(0)] CoseSign<'a>),
-
-    /// COSE_Sign1_Tagged (tag 18)
-    #[n(1)]
-    Sign1(#[n(0)] CoseSign1<'a>),
-
-    /// COSE_Mac_Tagged (tag 97)
-    #[n(2)]
-    Mac(#[n(0)] CoseMac<'a>),
-
-    /// COSE_Mac0_Tagged (tag 17)
-    #[n(3)]
-    Mac0(#[n(0)] CoseMac0<'a>),
+impl SuitAuthentication<'_> {
+    /// Verify the digest of the [`SuitAuthentication`] block (computed) over bstr wrapped
+    ///  [`SuitEnvelope::manifest`] bytes.
+    pub(crate) fn suit_verify_digest(&self, manifest_bytes: &[u8]) -> Result<(), SuitError> {
+        let digest: SuitDigest = decode(self.digest)?;
+        digest.suit_verify_digest(manifest_bytes)
+    }
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(array)]
 pub struct SuitDigest<'a> {
     #[n(0)]
-    pub algorithm_id: SuitAlgorithmId,
-    #[cbor(n(1), with = "minicbor::bytes")]
+    pub hash_alg: HashAlg,
+    #[cbor(b(1), with = "minicbor::bytes")]
     pub bytes: &'a [u8],
 }
 
 #[derive(Debug, Encode, Decode)]
 #[cbor(index_only)]
-pub enum SuitAlgorithmId {
-    #[n(0)]
-    Invalid,
+pub enum HashAlg {
     #[n(-16)]
     Sha256,
     #[n(-18)]
@@ -112,6 +101,76 @@ pub enum SuitAlgorithmId {
     Sha512,
     #[n(-45)]
     Shake256,
+}
+
+impl SuitDigest<'_> {
+    /// Verify a Suit Digest computed over a `buffer`.
+    ///
+    /// Supports Sha256, Sha384, Sha512
+    pub fn suit_verify_digest(&self, buffer: &[u8]) -> Result<(), SuitError> {
+        match self.hash_alg {
+            HashAlg::Sha256 => self.verify_sha256(buffer),
+            HashAlg::Sha384 => self.verify_sha384(buffer),
+            HashAlg::Sha512 => self.verify_sha512(buffer),
+            HashAlg::Shake128 => Err(SuitError::unexpected_hash_alg(-18)),
+            HashAlg::Shake256 => Err(SuitError::unexpected_hash_alg(-45)),
+        }
+    }
+
+    /// Verify a Suit Digest computed over a `buffer` with Sha256.
+    fn verify_sha256(&self, buffer: &[u8]) -> Result<(), SuitError> {
+        use sha2::{Digest, Sha256};
+        use subtle::ConstantTimeEq;
+        let mut hasher = Sha256::new();
+
+        hasher.update(buffer);
+        let finalized = hasher.finalize();
+        let computed = finalized;
+
+        if computed.ct_eq(self.bytes).unwrap_u8() == 1 {
+            Ok(())
+        } else {
+            Err(SuitError::invalid_digest())
+        }
+    }
+
+    /// Verify a Suit Digest computed over a `buffer` with Sha384.
+    fn verify_sha384(&self, buffer: &[u8]) -> Result<(), SuitError> {
+        use sha2::Sha384;
+        use sha3::Digest;
+        use subtle::ConstantTimeEq;
+
+        let mut hasher = Sha384::new();
+
+        hasher.update(buffer);
+        let finalized = hasher.finalize();
+        let computed = finalized;
+
+        if computed.ct_eq(self.bytes).unwrap_u8() == 1 {
+            Ok(())
+        } else {
+            Err(SuitError::default())
+        }
+    }
+
+    /// Verify a Suit Digest computed over a `buffer` with Sha512.
+    fn verify_sha512(&self, buffer: &[u8]) -> Result<(), SuitError> {
+        use sha2::Sha512;
+        use sha3::Digest;
+        use subtle::ConstantTimeEq;
+
+        let mut hasher = Sha512::new();
+
+        hasher.update(buffer);
+        let finalized = hasher.finalize();
+        let computed = finalized;
+
+        if computed.ct_eq(self.bytes).unwrap_u8() == 1 {
+            Ok(())
+        } else {
+            Err(SuitError::default())
+        }
+    }
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -198,9 +257,9 @@ pub struct SuitComponents<'a>(#[cbor(borrow)] IterableComponentIdentifier<'a>); 
 impl<'a> SuitComponents<'a> {
     pub fn get(
         &self,
-    ) -> Result<impl Iterator<Item = Result<SuitComponentIdentifier<'a>, SuitError>>, SuitError>
+    ) -> Result<impl Iterator<Item = Result<SuitComponentIdentifier<'a>, CborError>>, SuitError>
     {
-        self.0.get()
+        self.0.get().map_err(|e| e.into())
     }
 }
 
@@ -209,8 +268,8 @@ impl<'a> SuitComponents<'a> {
 pub struct SuitComponentIdentifier<'a>(#[cbor(borrow)] IterableByteSlice<'a>);
 
 impl<'a> SuitComponentIdentifier<'a> {
-    pub fn get(&self) -> Result<impl Iterator<Item = Result<&'a ByteSlice, SuitError>>, SuitError> {
-        self.0.get()
+    pub fn get(&self) -> Result<impl Iterator<Item = Result<&'a ByteSlice, CborError>>, SuitError> {
+        self.0.get().map_err(|e| e.into())
     }
 }
 
@@ -467,4 +526,58 @@ pub struct SuitTextKeys<'a> {
     pub manifest_json_source: Option<&'a str>,
     #[n(4)]
     pub manifest_yaml_source: Option<&'a str>,
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_digest_verify() {
+        use super::*;
+        use minicbor::decode;
+
+        let digest: SuitDigest = decode(&cbor_macro::cbo!(
+            r#" [
+                    / algorithm-id / -16 / "sha256" /,
+                    / digest-bytes /
+    h'6658ea560262696dd1f13b782239a064da7c6c5cbaf52fded428a6fc83c7e5af'
+                ] "#
+        ))
+        .unwrap();
+        let manifest_bytes = &cbor_macro::cbo!(
+            r#"<< {
+                / manifest-version / 1:1,
+                / manifest-sequence-number / 2:0,
+                / common / 3:<< {
+                    / components / 2:[
+                        [h'00']
+                    ],
+                    / shared-sequence / 4:<< [
+                        / directive-override-parameters / 20,{
+                            / vendor-id /
+    1:h'fa6b4a53d5ad5fdfbe9de663e4d41ffe' / fa6b4a53-d5ad-5fdf-
+    be9d-e663e4d41ffe /,
+                            / class-id /
+    2:h'1492af1425695e48bf429b2d51f2ab45' /
+    1492af14-2569-5e48-bf42-9b2d51f2ab45 /,
+                            / image-digest / 3:<< [
+                                / algorithm-id / -16 / "sha256" /,
+                                / digest-bytes /
+    h'00112233445566778899aabbccddeeff0123456789abcdeffedcba9876543210'
+                            ] >>,
+                            / image-size / 14:34768
+                        },
+                        / condition-vendor-identifier / 1,15,
+                        / condition-class-identifier / 2,15
+                    ] >>
+                } >>,
+                / validate / 7:<< [
+                    / condition-image-match / 3,15
+                ] >>,
+                / invoke / 9:<< [
+                    / directive-invoke / 23,2
+                ] >>
+            } >>"#
+        );
+        digest.suit_verify_digest(manifest_bytes).unwrap()
+    }
 }
