@@ -47,6 +47,7 @@
 #![no_std]
 
 pub mod cose;
+mod crypto;
 pub mod errors;
 pub mod keys;
 mod multitype;
