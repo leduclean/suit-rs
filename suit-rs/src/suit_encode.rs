@@ -1,4 +1,3 @@
-use crate::cbor_iter::CborIter;
 use crate::flat_seq::FlatSequence;
 use crate::suit_manifest::*;
 use minicbor::{Encode, Encoder, encode::Error as EncodeError};
@@ -15,17 +14,6 @@ impl<Ctx> Encode<Ctx> for SuitReportingBits {
 }
 
 impl<'a, C> Encode<C> for FlatSequence<'a> {
-    fn encode<W: minicbor::encode::Write>(
-        &self,
-        _e: &mut minicbor::Encoder<W>,
-        _ctx: &mut C,
-    ) -> Result<(), minicbor::encode::Error<W::Error>> {
-        // TODO
-        Ok(())
-    }
-}
-
-impl<'a, C, T> Encode<C> for CborIter<'a, T> {
     fn encode<W: minicbor::encode::Write>(
         &self,
         _e: &mut minicbor::Encoder<W>,

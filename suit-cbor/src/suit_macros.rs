@@ -1,3 +1,4 @@
+#[macro_export]
 macro_rules! iter_wrapper {
     ($name:ident, $inner:ty) => {
         #[doc = concat!(
@@ -9,7 +10,7 @@ macro_rules! iter_wrapper {
         )]
         #[derive(Debug, Encode, Decode)]
         #[cbor(transparent)]
-        pub struct $name<'a>(#[cbor(borrow)] pub(crate) crate::cbor_iter::CborIter<'a, $inner>);
+        pub struct $name<'a>(#[cbor(borrow)] pub(crate) $crate::CborIter<'a, $inner>);
 
         impl<'a> $name<'a> {
             /// Give an Iterator over all array elements.
@@ -17,11 +18,12 @@ macro_rules! iter_wrapper {
             /// This supports definite length arrays and uses the
             /// [`Decode`] trait to decode each element. *Only finite length array are supported*
             #[inline]
+            #[allow(dead_code)]
             pub fn get(
                 &self,
             ) -> Result<
-                impl Iterator<Item = Result<$inner, crate::errors::SuitError>>,
-                crate::errors::SuitError,
+                impl Iterator<Item = Result<$inner, $crate::errors::CborError>>,
+                $crate::errors::CborError,
             > {
                 self.0.get()
             }
@@ -29,6 +31,7 @@ macro_rules! iter_wrapper {
     };
 }
 
+#[macro_export]
 macro_rules! bstr_wrapper {
     ($name:ident, $inner:ty) => {
         #[doc = concat!(
@@ -39,7 +42,7 @@ macro_rules! bstr_wrapper {
         )]
         #[derive(Debug, Encode, Decode)]
         #[cbor(transparent)]
-        pub struct $name<'a>(#[cbor(borrow)] pub(crate) BstrStruct<'a, $inner>);
+        pub struct $name<'a>(#[cbor(borrow)] pub(crate) $crate::BstrStruct<'a, $inner>);
 
         impl<'a> $name<'a> {
             /// Give the *bstr .cbor* inner structure
@@ -47,9 +50,27 @@ macro_rules! bstr_wrapper {
             /// It uses the [`Decode`] trait to *decode* the inner type and raises [`crate::errors::SuitError`]
             /// if failing to.
             #[inline]
-            pub fn get(&self) -> Result<$inner, SuitError> {
+            pub fn get(&self) -> Result<$inner, $crate::errors::CborError> {
                 self.0.get()
             }
+
+            /// Get the inner bytes of the bstr wrapper struct (without the bstr wrapper).
+            #[inline]
+            pub fn inner_bytes(&self) -> Result<&'a [u8], $crate::errors::CborError> {
+                self.0.inner_bytes()
+            }
+
+
+            /// Get the raw bytes of bstr wrapped struct.
+            #[inline]
+            pub fn raw_bytes(&self) -> &'a [u8] {
+                self.0.raw_bytes()
+
+            }
+
+
         }
+
+
     };
 }

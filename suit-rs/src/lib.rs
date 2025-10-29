@@ -8,21 +8,16 @@ extern crate alloc;
 // modules
 #[macro_use]
 mod suit_debug_log;
-#[macro_use]
-mod suit_macros;
 
-mod bstr_struct;
-mod cbor_iter;
 mod errors;
 mod flat_seq;
 mod suit_decode;
 mod suit_encode;
 
 pub mod handler;
-pub mod suit_cose;
 pub mod suit_manifest;
-
 pub use errors::SuitError;
+
 /// Decode a SUIT manifest from raw bytes into a handler.
 ///
 /// # Arguments
@@ -35,9 +30,9 @@ pub use errors::SuitError;
 /// * `Ok(())` on success
 /// * `Err(SuitError)` if decoding fails
 ///
-pub fn suit_decode<H>(data: &[u8], handler: &mut H) -> Result<(), SuitError>
+pub fn suit_decode<H>(data: &[u8], handler: &mut H, key_buf: &[u8]) -> Result<(), SuitError>
 where
     H: handler::SuitStartHandler,
 {
-    suit_decode::decode_and_dispatch(data, handler)
+    suit_decode::decode_and_dispatch(data, handler, key_buf)
 }
