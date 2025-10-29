@@ -1,10 +1,16 @@
+use crate::crypto;
 use crate::errors::{CoseError, ErrorImpl};
-use crate::keys::{CoseKeySet, KeyMaterial, KeyOp, KeyType};
+use crate::keys::{CoseKey, CoseKeySet, KeyMaterial, KeyOp, KeyType};
+use crate::multitype::NulOrBytes;
 use crate::verify;
+
+use heapless::Vec;
 use minicbor::{Decode, Encode};
 use suit_cbor::{bstr_wrapper, iter_wrapper};
 
+const MAX_SHARED_SECRET_LEN: usize = 66;
 const MAX_SUPPORTED_ACCESSTOKEN_LEN: usize = 256;
+const MAX_CEK_KEY_LEN: usize = 64;
 
 /// HeaderMap as described in RCF 9052.
 ///
@@ -23,6 +29,9 @@ pub struct HeaderMap<'a> {
 
     #[cbor(b(5), with = "minicbor::bytes")]
     pub(crate) iv: Option<&'a [u8]>,
+
+    #[b(-1)]
+    ephemeral_key: Option<CoseKey<'a>>,
 }
 
 impl HeaderMap<'_> {
@@ -32,6 +41,11 @@ impl HeaderMap<'_> {
             alg: self.alg.or(other.alg),
             kid: self.kid.or(other.kid),
             iv: self.iv.or(other.iv),
+            ephemeral_key: self
+                .ephemeral_key
+                .as_ref()
+                .copied()
+                .or(other.ephemeral_key.as_ref().copied()),
         }
     }
 }
@@ -327,4 +341,209 @@ struct CoseRecipient<'a> {
     #[cbor(b(2), with = "minicbor::bytes")]
     ciphertext: Option<&'a [u8]>,
     // could have been recipients field (not supported)
+}
+
+impl CoseMac<'_> {
+    /// Verification process for a MAC with multiple recipients as detailled in 5.4 of RFC 9052.
+    ///
+    /// Only supports A128kw, A255k and ECDH + A128k kw.
+    pub fn suit_verify_mac(
+        &self,
+        payload_buf: Option<&[u8]>,
+        keys: &[u8],
+    ) -> Result<(), CoseError> {
+        let headers = self.unprotected.updated_with(&self.protected.get()?);
+        let payload = match self.payload {
+            Some(p) => p,
+            None => payload_buf.ok_or(ErrorImpl::MissingPayload)?,
+        };
+
+        let aad = MacStructure {
+            context: "MAC",
+            body_protected: self.protected.inner_bytes()?,
+            external_aad: &[],
+            payload,
+        };
+
+        let mut to_be_maced = heapless::Vec::<u8, MAX_SUPPORTED_ACCESSTOKEN_LEN>::new();
+        minicbor::encode(aad, minicbor_adapters::WriteToHeapless(&mut to_be_maced))?;
+
+        // Buffer given to write the corresponding CEK.
+        let mut cek: heapless::Vec<u8, MAX_CEK_KEY_LEN> = heapless::Vec::new();
+
+        // Try to get a key from each recipient, stop as soon as a key is found.
+        let success = self
+            .recipients
+            .get()?
+            .filter_map(Result::ok)
+            .any(|cr| cr.decrypt_process(keys, &mut cek).is_ok());
+
+        if success {
+            if !matches!(
+                headers.alg,
+                Some(CoseAlg::HMAC256256) | Some(CoseAlg::HMAC25664)
+            ) {
+                Err(ErrorImpl::UnexpectedMacAlg.into())
+            } else {
+                verify::verify_mac(&cek, &to_be_maced, self.tag)
+            }
+        } else {
+            Err(ErrorImpl::InconsistentDetails.into())
+        }
+    }
+}
+
+impl<'a> CoseRecipient<'a> {
+    ///  Try to decrypt a Cose Recipient.
+    ///
+    /// Look up a KEK in `key_bytes` and if found, use it to unwrap `ciphertext` (AES-KW A128/A256) and write the resulting CEK into `out`.
+    fn decrypt_process<const N: usize>(
+        &self,
+        key_bytes: &'a [u8],
+        out: &'a mut heapless::Vec<u8, N>,
+    ) -> Result<(), CoseError> {
+        use sha2::Sha256;
+
+        let key_set: CoseKeySet = minicbor::decode(key_bytes)?;
+
+        let protected_bytes = self.protected.inner_bytes()?;
+        let headers = if !protected_bytes.is_empty() {
+            &self.unprotected.updated_with(&self.protected.get()?)
+        } else {
+            &self.unprotected
+        };
+        if let Some(encoded_key) = self.ciphertext {
+            // Kek `unwrap()` needs exactly this size of output buffer.
+            out.resize_default(encoded_key.len() - 8)?;
+
+            match headers.alg {
+                Some(CoseAlg::A128KW) => {
+                    if let KeyMaterial::Symmetric(kek) = key_set.match_and_get_key(
+                        KeyType::Symmetric,
+                        headers.alg,
+                        KeyOp::UnwrapKey,
+                        headers.kid,
+                    )? {
+                        if !protected_bytes.is_empty() {
+                            return Err(ErrorImpl::InconsistentDetails.into());
+                        };
+                        // Aes KEK extraction into `out`.
+                        crypto::unwrap_aes_kw(kek, encoded_key, out)?;
+                        Ok(())
+                    } else {
+                        Err(ErrorImpl::InconsistentDetails.into())
+                    }
+                }
+                Some(CoseAlg::A256KW) => {
+                    if let KeyMaterial::Symmetric(kek) = key_set.match_and_get_key(
+                        KeyType::Symmetric,
+                        headers.alg,
+                        KeyOp::UnwrapKey,
+                        headers.kid,
+                    )? {
+                        if !protected_bytes.is_empty() {
+                            return Err(ErrorImpl::InconsistentDetails.into());
+                        };
+                        // Aes KEK extraction into `out`.
+                        crypto::unwrap_aes_kw(kek, encoded_key, out)?;
+                        Ok(())
+                    } else {
+                        Err(ErrorImpl::InconsistentDetails.into())
+                    }
+                }
+                Some(CoseAlg::ECDHESA128KW) => {
+                    if let KeyMaterial::Private { d, crv } = key_set.match_and_get_key(
+                        KeyType::Ec2,
+                        self.unprotected.alg,
+                        KeyOp::DeriveBits,
+                        headers.kid,
+                    )? {
+                        let ephemeral = headers.ephemeral_key.ok_or(ErrorImpl::MissingKeyValue)?;
+
+                        let mut z = [0u8; MAX_SHARED_SECRET_LEN];
+
+                        if let KeyMaterial::Ec2 { x, y, crv: pub_crv } = ephemeral.try_into()? {
+                            if crv != pub_crv {
+                                return Err(ErrorImpl::UnexpectedCurve.into());
+                            } else {
+                                crypto::perform_ecdh_es(d, x, y, pub_crv, &mut z)?;
+                            };
+                        }
+
+                        let kdf_context = CoseKdfContext {
+                            alg_id: CoseAlg::A128KW,
+                            party_u_info: PartyInfo {
+                                identity: NulOrBytes::Nul,
+                                nonce: NulOrBytes::Nul,
+                                other: NulOrBytes::Nul,
+                            },
+                            party_v_info: PartyInfo {
+                                identity: NulOrBytes::Nul,
+                                nonce: NulOrBytes::Nul,
+                                other: NulOrBytes::Nul,
+                            },
+                            sup_pub_info: SuppPubInfo {
+                                key_length: 128,
+                                protected_bytes: self.protected.inner_bytes()?,
+                            },
+                        };
+
+                        let mut context_bytes: Vec<u8, 64> = heapless::Vec::new();
+                        minicbor::encode(
+                            kdf_context,
+                            minicbor_adapters::WriteToHeapless(&mut context_bytes),
+                        )?;
+                        let mut kek_bytes = [0u8; 16];
+                        // Hkdf expansion using Sha256,
+                        let hk = hkdf::Hkdf::<Sha256>::new(None, &z);
+                        hk.expand(&context_bytes, &mut kek_bytes)
+                            .map_err(|_| ErrorImpl::InconsistentDetails)?;
+
+                        // Aes KEK extraction into `out`.
+                        crypto::unwrap_aes_kw(&kek_bytes, encoded_key, out)?;
+                        Ok(())
+                    } else {
+                        Err(ErrorImpl::UnvalidKeySet.into())
+                    }
+                }
+                _ => Err(ErrorImpl::UnexpectedMacAlg.into()),
+            }
+        } else {
+            Err(ErrorImpl::InconsistentDetails.into())
+        }
+    }
+}
+
+/// Context information structure for KDF process.
+/// As decrypted in [RFC 9053 5.2](https://www.rfc-editor.org/rfc/rfc9053#section-5.2)
+#[derive(Encode)]
+struct CoseKdfContext<'a> {
+    #[n(0)]
+    alg_id: CoseAlg,
+    #[n(1)]
+    party_u_info: PartyInfo<'a>,
+    #[n(2)]
+    party_v_info: PartyInfo<'a>,
+    #[n(3)]
+    sup_pub_info: SuppPubInfo<'a>,
+}
+
+/// Context field structure to wrap PartyUInfo and PartyVInfo.
+#[derive(Encode)]
+struct PartyInfo<'a> {
+    #[cbor(b(0))]
+    identity: NulOrBytes<'a>,
+    #[cbor(b(1))]
+    nonce: NulOrBytes<'a>,
+    #[cbor(b(2))]
+    other: NulOrBytes<'a>,
+}
+
+/// Context field structure that contains information that is mutually known to both parties
+#[derive(Encode)]
+struct SuppPubInfo<'a> {
+    #[n(0)]
+    key_length: u32,
+    #[cbor(b(1), with = "minicbor::bytes")]
+    protected_bytes: &'a [u8],
 }
