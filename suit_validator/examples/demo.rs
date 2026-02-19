@@ -1,7 +1,7 @@
 #![no_std]
 use cose_minicbor::keys::{CoseAlg, CoseKey, CoseKeySetBuilder, KeyType};
-use suit_rs::handler::*;
-use suit_rs::{SuitError, suit_decode, suit_manifest::*};
+use suit_validator::handler::*;
+use suit_validator::{SuitError, suit_decode, suit_manifest::*};
 struct DemoHandler;
 
 impl SuitStartHandler for DemoHandler {

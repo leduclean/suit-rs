@@ -1,5 +1,5 @@
 [package]
-name = "suit-rs"
+name = "suit_validator"
 version = "0.1.0"
 edition = "2024"
 
@@ -17,8 +17,8 @@ defmt = ["dep:defmt"]
 rusty-hook = "^0.11.2"
 
 [dependencies]
-cose-minicbor = { version = "0.1.0", path = "../cose-minicbor"}
-suit-cbor = { version = "0.1.0", path = "../suit-cbor"}
+cose_minicbor = { version = "0.1.0", path = "../cose_minicbor"}
+suit_cbor = { version = "0.1.0", path = "../suit_cbor"}
 
 bitflags = { version = "2.9.4", default-features = false, features = ["serde"] }
 
