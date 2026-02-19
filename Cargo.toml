@@ -1,8 +1,8 @@
 [workspace]
 members  = [
-  "suit-rs",
-  "cose-minicbor",
-  "suit-cbor",
+  "suit_validator",
+  "cose_minicbor",
+  "suit_cbor",
 ]
 
 resolver = "2"

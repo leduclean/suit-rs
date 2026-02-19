@@ -1,9 +1,9 @@
 use cbor_diag::parse_diag;
 use cose_minicbor::keys::{CoseAlg, Curve};
 use cose_minicbor::keys::{CoseKey, CoseKeySetBuilder, KeyType};
-use suit_rs::SuitError;
-use suit_rs::handler::*;
-use suit_rs::suit_manifest;
+use suit_validator::SuitError;
+use suit_validator::handler::*;
+use suit_validator::suit_manifest;
 
 const VENDOR_ID_BYTES: &[u8] = &[
     0xfa, 0x6b, 0x4a, 0x53, 0xd5, 0xad, 0x5f, 0xdf, 0xbe, 0x9d, 0xe6, 0x63, 0xe4, 0xd4, 0x1f, 0xfe,
@@ -214,7 +214,7 @@ fn test_decode_example_0() {
     cose_key_builder.push_key(key).expect("Key Set is full");
     let key_bytes = cose_key_builder.into_bytes().expect("Bytes should be okay");
     // Decode the SUIT manifest
-    suit_rs::suit_decode(
+    suit_validator::suit_decode(
         cbor_item.to_bytes().as_slice(),
         &mut StartHandler,
         &key_bytes,
