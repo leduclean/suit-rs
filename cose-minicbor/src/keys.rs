@@ -253,7 +253,7 @@ pub enum KeyOp {
 }
 
 // Cose Elliptic Curves values as decrypted in IANA spec [COSE
-/// Key Type Parameters](https://www.iana.org/assignments/cose/cose.xhtml#key-type-parameters).
+/// Key Type Parameters](<https://www.iana.org/assignments/cose/cose.xhtml#key-type-parameters>).
 #[derive(Decode, Debug, Encode, PartialEq, Copy, Clone)]
 #[cbor(index_only)]
 #[non_exhaustive]
@@ -405,7 +405,7 @@ impl<'a> TryFrom<CoseKey<'a>> for KeyMaterial<'a> {
                 } else if let (Some(x), Some(y)) = (key.x, key.y) {
                     Ok(KeyMaterial::Ec2 { x, y, crv })
                 } else {
-                    return Err(ErrorImpl::MissingKeyValue.into());
+                    Err(ErrorImpl::MissingKeyValue.into())
                 }
             }
             KeyType::Okp => {

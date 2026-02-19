@@ -131,7 +131,7 @@ impl<'a, Ctx> Decode<'a, Ctx> for TstrOrInt<'a> {
 
 /// For fields that may contain `null` or a byte string.
 ///
-/// We can't use Option<T> from minicbor because the value is skipped if None.
+/// We can't use `Option<T>` from minicbor because the value is skipped if None.
 /// Here we clearly want to encode Nul if not present
 pub(crate) enum NulOrBytes<'a> {
     Nul,
