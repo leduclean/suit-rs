@@ -1,5 +1,5 @@
 [package]
-name = "suit-cbor"
+name = "suit_cbor"
 version = "0.1.0"
 edition = "2024"
 
