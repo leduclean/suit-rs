@@ -2,6 +2,13 @@
 name = "suit_cbor"
 version = "0.1.0"
 edition = "2024"
+description = "Lightweight no_std utilities for lazy CBOR decoding"
+license = "MIT"
+repository = "https://github.com/leduclean/suit-rs"
+documentation = "https://docs.rs/suit_cbor"
+readme = "README.md"
+keywords = ["cbor", "no_std", "embedded", "suit", "cose"]
+categories = ["encoding", "no-std", "embedded"]
 
 [dependencies]
 minicbor = { version = "2.1.1", default-features = false, features = ["derive"] }

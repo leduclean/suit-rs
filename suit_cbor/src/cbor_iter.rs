@@ -4,9 +4,44 @@ use minicbor::data::Type;
 use minicbor::decode::Error as DecodeError;
 use minicbor::{Decode, Decoder, Encode};
 
-/// Internal bytes wrapper over CBOR arrays of type `T`.
+/// A lazily decoded CBOR array wrapper.
 ///
-/// You can use [`CborIter::get`] to acces an iterator that lazily decode CBOR arrays.
+/// `CborIter<T>` stores the raw CBOR bytes of an array without decoding
+/// its elements immediately.
+///
+/// Instead of eagerly decoding the full array, it allows deferred,
+/// element-by-element decoding via [`CborIter::get()`].
+///
+///
+/// # Behavior
+///
+/// - The outer CBOR array is not decoded at construction time.
+/// - The raw encoded bytes are preserved.
+/// - Calling [`CborIter::get()`] returns an iterator that lazily decodes each element.
+/// - Both definite and indefinite-length arrays are supported.
+///
+/// # Example
+///
+/// ```rust
+/// use minicbor::Decode;
+/// use suit_cbor::CborIter;
+///
+/// #[derive(Decode)]
+/// struct Item {
+///     #[n(0)]
+///     value: u8,
+/// }
+///
+/// # fn example(data: &[u8]) -> Result<(), Box<dyn core::fmt::Debug>> {
+/// let iter: CborIter<Item> = minicbor::decode(data)?;
+///
+/// for element in iter.get()? {
+///     let item = element?;
+///     // process item
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct CborIter<'b, T> {
     bytes: &'b [u8],
@@ -33,9 +68,16 @@ impl<'b, T> CborIter<'b, T>
 where
     T: Decode<'b, ()>,
 {
-    /// Give iterator over the array.
+    /// Returns a lazy iterator over the decoded array elements.
     ///
-    /// It is exposed to the public API with [`iter_wrapper!`].
+    /// The iterator:
+    /// - Decodes elements one by one.
+    /// - Stops automatically at the end of the array.
+    /// - Handles both definite and indefinite-length CBOR arrays.
+    ///
+    /// Each iteration yields `Result<T, CborError>`.
+    ///
+    /// Decoding errors are propagated per element.
     pub fn get(&self) -> Result<impl Iterator<Item = Result<T, CborError>>, CborError> {
         let mut d = Decoder::new(self.bytes);
         match d.array()? {
@@ -56,7 +98,13 @@ where
     }
 }
 
-/// An iterator over CBOR array
+/// Internal iterator implementation for [`CborIter`].
+///
+/// Handles:
+/// - Definite-length arrays (tracked via `remaining`)
+/// - Indefinite-length arrays (detected via CBOR break marker)
+///
+/// This type is not exposed publicly.
 struct ArrayIter<'b, T> {
     decoder: Decoder<'b>,
     remaining: Option<u64>,
