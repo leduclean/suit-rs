@@ -25,6 +25,7 @@ use minicbor::{Decode, Decoder, Encode};
 /// ```rust
 /// use minicbor::Decode;
 /// use suit_cbor::CborIter;
+/// use suit_cbor::errors::CborError;
 ///
 /// #[derive(Decode)]
 /// struct Item {
@@ -32,7 +33,7 @@ use minicbor::{Decode, Decoder, Encode};
 ///     value: u8,
 /// }
 ///
-/// # fn example(data: &[u8]) -> Result<(), Box<dyn core::fmt::Debug>> {
+/// # fn example(data: &[u8]) -> Result<(), CborError> {
 /// let iter: CborIter<Item> = minicbor::decode(data)?;
 ///
 /// for element in iter.get()? {
@@ -205,5 +206,25 @@ mod tests {
         assert!(test_iter.next().is_none());
     }
 
-    // TODO add test for indefinite size arary
+    #[test]
+    fn test_indefinite_array() {
+        // 0x9F = indefinite array start, 0x01,0x02,0x03 elements, 0xFF break
+        let data: &[u8] = &[0x9F, 0x01, 0x02, 0x03, 0xFF];
+        let iter: CborIter<'_, u8> = minicbor::decode(&data).unwrap();
+        let mut iter = iter.get().unwrap();
+        let mut expected = [1, 2, 3];
+        for exp in expected.iter_mut() {
+            let val = iter.next().unwrap().unwrap();
+            assert_eq!(val, *exp);
+        }
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_empty_array() {
+        let data = cbor_macro::cbo!(r#"[]"#);
+        let iter: CborIter<'_, &'_ ByteSlice> = minicbor::decode(&data).unwrap();
+        let mut it = iter.get().unwrap();
+        assert!(it.next().is_none());
+    }
 }

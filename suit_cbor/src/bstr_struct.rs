@@ -99,4 +99,12 @@ mod tests {
         let seq = lazy.get().unwrap();
         assert_eq!(seq, minicbor::decode(&COMMAND_SEQ).unwrap())
     }
+
+    #[test]
+    fn test_invalid_data() {
+        let invalid_bytes = b"\xFF\xFF";
+        let bstr: BstrStruct<u8> = minicbor::decode(invalid_bytes).unwrap();
+        let result = bstr.get();
+        assert!(result.is_err());
+    }
 }
