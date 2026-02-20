@@ -4,9 +4,45 @@ use minicbor::data::Type;
 use minicbor::decode::Error as DecodeError;
 use minicbor::{Decode, Decoder, Encode};
 
-/// Internal bytes wrapper over CBOR arrays of type `T`.
+/// A lazily decoded CBOR array wrapper.
 ///
-/// You can use [`CborIter::get`] to acces an iterator that lazily decode CBOR arrays.
+/// `CborIter<T>` stores the raw CBOR bytes of an array without decoding
+/// its elements immediately.
+///
+/// Instead of eagerly decoding the full array, it allows deferred,
+/// element-by-element decoding via [`CborIter::get()`].
+///
+///
+/// # Behavior
+///
+/// - The outer CBOR array is not decoded at construction time.
+/// - The raw encoded bytes are preserved.
+/// - Calling [`CborIter::get()`] returns an iterator that lazily decodes each element.
+/// - Both definite and indefinite-length arrays are supported.
+///
+/// # Example
+///
+/// ```rust
+/// use minicbor::Decode;
+/// use suit_cbor::CborIter;
+/// use suit_cbor::errors::CborError;
+///
+/// #[derive(Decode)]
+/// struct Item {
+///     #[n(0)]
+///     value: u8,
+/// }
+///
+/// # fn example(data: &[u8]) -> Result<(), CborError> {
+/// let iter: CborIter<Item> = minicbor::decode(data)?;
+///
+/// for element in iter.get()? {
+///     let item = element?;
+///     // process item
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct CborIter<'b, T> {
     bytes: &'b [u8],
@@ -33,9 +69,16 @@ impl<'b, T> CborIter<'b, T>
 where
     T: Decode<'b, ()>,
 {
-    /// Give iterator over the array.
+    /// Returns a lazy iterator over the decoded array elements.
     ///
-    /// It is exposed to the public API with [`iter_wrapper!`].
+    /// The iterator:
+    /// - Decodes elements one by one.
+    /// - Stops automatically at the end of the array.
+    /// - Handles both definite and indefinite-length CBOR arrays.
+    ///
+    /// Each iteration yields `Result<T, CborError>`.
+    ///
+    /// Decoding errors are propagated per element.
     pub fn get(&self) -> Result<impl Iterator<Item = Result<T, CborError>>, CborError> {
         let mut d = Decoder::new(self.bytes);
         match d.array()? {
@@ -56,7 +99,13 @@ where
     }
 }
 
-/// An iterator over CBOR array
+/// Internal iterator implementation for [`CborIter`].
+///
+/// Handles:
+/// - Definite-length arrays (tracked via `remaining`)
+/// - Indefinite-length arrays (detected via CBOR break marker)
+///
+/// This type is not exposed publicly.
 struct ArrayIter<'b, T> {
     decoder: Decoder<'b>,
     remaining: Option<u64>,
@@ -95,11 +144,12 @@ impl<'b, T: Decode<'b, ()>> Iterator for ArrayIter<'b, T> {
 impl<'a, C, T> Encode<C> for CborIter<'a, T> {
     fn encode<W: minicbor::encode::Write>(
         &self,
-        _e: &mut minicbor::Encoder<W>,
+        e: &mut minicbor::Encoder<W>,
         _ctx: &mut C,
     ) -> Result<(), minicbor::encode::Error<W::Error>> {
-        // TODO
-        Ok(())
+        e.writer_mut()
+            .write_all(self.bytes)
+            .map_err(minicbor::encode::Error::write)
     }
 }
 
@@ -157,5 +207,41 @@ mod tests {
         assert!(test_iter.next().is_none());
     }
 
-    // TODO add test for indefinite size arary
+    #[test]
+    fn test_cbor_iter_roundtrip() {
+        use minicbor::Encode;
+
+        let bytes_def = cbor_macro::cbo!(r#"[1,2,3]"#);
+        let iter_def: CborIter<u8> = minicbor::decode(&bytes_def).unwrap();
+
+        let mut buf = [0u8; 8];
+        let mut enc = minicbor::Encoder::new(&mut buf[..]);
+        iter_def.encode(&mut enc, &mut ()).unwrap();
+
+        let iter_decoded: CborIter<u8> = minicbor::decode(&buf).unwrap();
+
+        assert_eq!(bytes_def.as_ref(), iter_decoded.bytes);
+    }
+
+    #[test]
+    fn test_indefinite_array() {
+        // 0x9F = indefinite array start, 0x01,0x02,0x03 elements, 0xFF break
+        let data: &[u8] = &[0x9F, 0x01, 0x02, 0x03, 0xFF];
+        let iter: CborIter<'_, u8> = minicbor::decode(data).unwrap();
+        let mut iter = iter.get().unwrap();
+        let mut expected = [1, 2, 3];
+        for exp in expected.iter_mut() {
+            let val = iter.next().unwrap().unwrap();
+            assert_eq!(val, *exp);
+        }
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_empty_array() {
+        let data = cbor_macro::cbo!(r#"[]"#);
+        let iter: CborIter<'_, &'_ ByteSlice> = minicbor::decode(&data).unwrap();
+        let mut it = iter.get().unwrap();
+        assert!(it.next().is_none());
+    }
 }
