@@ -144,11 +144,12 @@ impl<'b, T: Decode<'b, ()>> Iterator for ArrayIter<'b, T> {
 impl<'a, C, T> Encode<C> for CborIter<'a, T> {
     fn encode<W: minicbor::encode::Write>(
         &self,
-        _e: &mut minicbor::Encoder<W>,
+        e: &mut minicbor::Encoder<W>,
         _ctx: &mut C,
     ) -> Result<(), minicbor::encode::Error<W::Error>> {
-        // TODO
-        Ok(())
+        e.writer_mut()
+            .write_all(self.bytes)
+            .map_err(minicbor::encode::Error::write)
     }
 }
 
@@ -207,10 +208,26 @@ mod tests {
     }
 
     #[test]
+    fn test_cbor_iter_roundtrip() {
+        use minicbor::Encode;
+
+        let bytes_def = cbor_macro::cbo!(r#"[1,2,3]"#);
+        let iter_def: CborIter<u8> = minicbor::decode(&bytes_def).unwrap();
+
+        let mut buf = [0u8; 8];
+        let mut enc = minicbor::Encoder::new(&mut buf[..]);
+        iter_def.encode(&mut enc, &mut ()).unwrap();
+
+        let iter_decoded: CborIter<u8> = minicbor::decode(&buf).unwrap();
+
+        assert_eq!(bytes_def.as_ref(), iter_decoded.bytes);
+    }
+
+    #[test]
     fn test_indefinite_array() {
         // 0x9F = indefinite array start, 0x01,0x02,0x03 elements, 0xFF break
         let data: &[u8] = &[0x9F, 0x01, 0x02, 0x03, 0xFF];
-        let iter: CborIter<'_, u8> = minicbor::decode(&data).unwrap();
+        let iter: CborIter<'_, u8> = minicbor::decode(data).unwrap();
         let mut iter = iter.get().unwrap();
         let mut expected = [1, 2, 3];
         for exp in expected.iter_mut() {
