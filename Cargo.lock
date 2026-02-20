@@ -175,7 +175,6 @@ dependencies = [
  "ed25519-dalek",
  "hbs-lms",
  "heapless",
- "hex",
  "hex-literal",
  "hkdf",
  "hmac",

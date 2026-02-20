@@ -5,7 +5,6 @@ use crate::multitype::NulOrBytes;
 use crate::verify_mac;
 use crate::verify_sign;
 
-use heapless::Vec;
 use minicbor::{Decode, Encode};
 use suit_cbor::{bstr_wrapper, iter_wrapper};
 
@@ -355,7 +354,6 @@ impl CoseMac<'_> {
         payload_buf: Option<&[u8]>,
         keys: &[u8],
     ) -> Result<(), CoseError> {
-        let headers = self.unprotected.updated_with(&self.protected.get()?);
         let payload = match self.payload {
             Some(p) => p,
             None => payload_buf.ok_or(ErrorImpl::MissingPayload)?,
