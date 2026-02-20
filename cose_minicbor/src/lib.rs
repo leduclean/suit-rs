@@ -47,8 +47,10 @@
 #![no_std]
 
 pub mod cose;
+pub mod cose_keys;
 mod crypto;
 pub mod errors;
-pub mod keys;
+mod keys;
 mod multitype;
-mod verify;
+mod verify_mac;
+mod verify_sign;

@@ -267,6 +267,18 @@ pub enum Curve {
     #[n(6)]
     Ed25519,
 }
+impl Curve {
+    /// Little helper to compare a curve with the expected.
+    ///
+    /// * `expected`: Expected curve.
+    /// * `actual`: Actual curve.
+    pub fn check_curve(self, expected: Curve) -> Result<(), CoseError> {
+        if expected != self {
+            return Err(ErrorImpl::UnexpectedCurve.into());
+        }
+        Ok(())
+    }
+}
 
 suit_cbor::iter_wrapper!(IterCoseKey, CoseKey<'a>);
 

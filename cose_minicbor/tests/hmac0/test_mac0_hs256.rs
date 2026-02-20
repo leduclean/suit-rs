@@ -1,5 +1,5 @@
 use cose_minicbor::cose::CoseMac0;
-use cose_minicbor::keys::{CoseAlg, CoseKey, CoseKeySetBuilder, KeyType};
+use cose_minicbor::cose_keys::{CoseAlg, CoseKey, CoseKeySetBuilder, KeyType};
 
 #[test]
 fn test_suit_verify_mac0() {

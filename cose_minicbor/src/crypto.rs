@@ -15,8 +15,8 @@
 //! assume all inputs (curve parameters, keys, and buffers) have already been validated.
 use crate::multitype::BytesBool;
 use crate::{
+    cose_keys::Curve,
     errors::{CoseError, ErrorImpl},
-    keys::Curve,
 };
 use p256::elliptic_curve::point::DecompressPoint;
 

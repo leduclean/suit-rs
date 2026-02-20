@@ -4,6 +4,35 @@ repository = "https://github.com/leduclean/suit-rs"
 version = "0.1.0"
 edition = "2024"
 
+[features] 
+default = ["sha256", "es256", "ed25519", "hss_lms", "hmac256", "a128kw", "a256kw"]
+
+# Authentification
+es256 = []
+ed25519 = []
+hss_lms = []
+
+# Symmetric
+hmac256 = []
+
+# Key Exchange 
+a128kw = []
+a256kw = []
+ecdh_es = []
+
+# Digest
+sha256 = []
+sha384 = []
+sha512 = []
+
+
+# MTI Profile sets
+suit-sha256-hmac-a128kw-a128ctr = ["sha256","hmac256","a128kw"]
+suit-sha256-esp256-ecdh-a128ctr = ["sha256","es256","a128kw","ecdh_es"]
+suit-sha256-ed25519-ecdh-a128ctr = ["sha256","ed25519","a128kw","ecdh_es"]
+suit-sha256-hsslms-a256kw-a256ctr = ["sha256","hss_lms","a256kw"]
+
+
 [dependencies]
 minicbor = { version = "2.1.1", default-features = false, features = ["derive"] }
 minicbor-adapters = { version = "0.0.8", default-features = false }
@@ -28,5 +57,4 @@ hmac = { version = "0.12.1", default-features = false }
 hbs-lms = { version = "0.1.1", default-features = false }
 ed25519-dalek = { version = "2.2.0", default-features = false }
 aes-kw = { version = "0.2.1", default-features = false }
-hex = "0.4.3"
 hkdf = { version = "0.12.4", default-features = false }

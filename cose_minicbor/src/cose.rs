@@ -1,8 +1,9 @@
+use crate::cose_keys::{CoseKey, CoseKeySet, KeyMaterial, KeyOp, KeyType};
 use crate::crypto;
 use crate::errors::{CoseError, ErrorImpl};
-use crate::keys::{CoseKey, CoseKeySet, KeyMaterial, KeyOp, KeyType};
 use crate::multitype::NulOrBytes;
-use crate::verify;
+use crate::verify_mac;
+use crate::verify_sign;
 
 use heapless::Vec;
 use minicbor::{Decode, Encode};
@@ -140,7 +141,7 @@ impl CoseSign1<'_> {
         };
         let mut signed_data = heapless::Vec::<u8, MAX_SUPPORTED_ACCESSTOKEN_LEN>::new();
         minicbor::encode(aad, minicbor_adapters::WriteToHeapless(&mut signed_data))?;
-        verify::verify_cose_sign(keys, &signed_data, headers, self.signature)
+        verify_sign::verify_cose_sign(keys, &signed_data, headers, self.signature)
     }
 }
 
@@ -217,7 +218,7 @@ impl CoseSign<'_> {
                 };
                 let mut to_be_signed = heapless::Vec::<u8, MAX_SUPPORTED_ACCESSTOKEN_LEN>::new();
                 minicbor::encode(aad, minicbor_adapters::WriteToHeapless(&mut to_be_signed))?;
-                verify::verify_cose_sign(keys, &to_be_signed, headers, sign.signature)
+                verify_sign::verify_cose_sign(keys, &to_be_signed, headers, sign.signature)
             })
     }
 }
@@ -295,7 +296,7 @@ impl CoseMac0<'_> {
             ) {
                 Err(ErrorImpl::UnexpectedMacAlg.into())
             } else {
-                verify::verify_mac(key, &to_be_maced, self.tag)
+                verify_mac::verify_mac(key, &to_be_maced, self.tag)
             }
         } else {
             // We should get the correct material
@@ -385,7 +386,7 @@ impl CoseMac<'_> {
             ) {
                 Err(ErrorImpl::UnexpectedMacAlg.into())
             } else {
-                verify::verify_mac(&cek, &to_be_maced, self.tag)
+                verify_mac::verify_mac(&cek, &to_be_maced, self.tag)
             }
         } else {
             Err(ErrorImpl::InconsistentDetails.into())

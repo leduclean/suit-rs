@@ -7,7 +7,7 @@
 //! These adapters make it possible to deserialize CBOR keys or parameters
 //! that can be represented in more than one way (e.g. a `bool` or a byte string),
 //! while keeping a strongly typed internal representation.
-use crate::keys::Curve;
+use crate::cose_keys::Curve;
 use minicbor::{
     Decode, Decoder, Encode, bytes::EncodeBytes, data::Type, decode::Error as DecodeError,
 };
