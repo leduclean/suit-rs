@@ -267,6 +267,7 @@ pub enum Curve {
     #[n(6)]
     Ed25519,
 }
+
 impl Curve {
     /// Little helper to compare a curve with the expected.
     ///

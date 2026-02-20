@@ -1,5 +1,6 @@
 use crate::errors::{CoseError, ErrorImpl};
 
+#[cfg(feature = "hmac")]
 /// Calls the MAC creation algorithm, passing in the key, and the bstr encoded ToBeMaced.
 /// Then compares the MAC value to the tag provided as described in [RFC9052 section 6.3](https://www.rfc-editor.org/rfc/rfc9052.html#section-6.3).
 pub(crate) fn verify_mac(

@@ -1,30 +1,32 @@
 [package]
 name = "cose_minicbor"
-repository = "https://github.com/leduclean/suit-rs" 
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/leduclean/suit-rs"
 
-[features] 
+[features]
 default = ["sha256", "es256", "ed25519", "hss_lms", "hmac256", "a128kw", "a256kw"]
 
 # Authentification
-es256 = []
-ed25519 = []
-hss_lms = []
+es256 = ["p256"]
+ed25519 = ["ed25519-dalek"]
+hss_lms = ["hbs-lms"]
 
 # Symmetric
-hmac256 = []
+hmac256 = ["hmac"]
+a128kw = ["aes-kw"]
+a256kw = ["aes-kw"]
 
 # Key Exchange 
-a128kw = []
-a256kw = []
-ecdh_es = []
+# curves for DH 
+ecdh_p256 = ["p256"]
+ecdh_p521 = ["p521"]
+ecdh_es = ["ecdh_p256"]
 
 # Digest
-sha256 = []
-sha384 = []
-sha512 = []
-
+sha256 = ["sha2"]
+sha384 = ["sha2"]
+sha512 = ["sha2"]
 
 # MTI Profile sets
 suit-sha256-hmac-a128kw-a128ctr = ["sha256","hmac256","a128kw"]
@@ -32,29 +34,31 @@ suit-sha256-esp256-ecdh-a128ctr = ["sha256","es256","a128kw","ecdh_es"]
 suit-sha256-ed25519-ecdh-a128ctr = ["sha256","ed25519","a128kw","ecdh_es"]
 suit-sha256-hsslms-a256kw-a256ctr = ["sha256","hss_lms","a256kw"]
 
-
 [dependencies]
 minicbor = { version = "2.1.1", default-features = false, features = ["derive"] }
 minicbor-adapters = { version = "0.0.8", default-features = false }
-suit_cbor = {version = "0.1.0", path = "../suit_cbor"}
+suit_cbor = { version = "0.1.0", path = "../suit_cbor" }
 cbor-macro = { version = "0.1.0", default-features = false }
 cboritem = { version = "0.1.3", default-features = false }
 cbor-diag = { version = "0.1.12", default-features = false }
 
-
 thiserror = { version = "2.0.17", default-features = false }
 heapless = { version = "0.9.1", default-features = false }
-
-
 hex-literal = { version = "1.0.0", default-features = false }
 
+# Symmetric crypto
+hmac = { version = "0.12.1", default-features = false, optional = true }
+aes-kw = { version = "0.2.1", default-features = false, optional = true }
 
-p256 = { version = "0.13.2", features = ["ecdsa", "ecdh"], default-features = false }
-p521 = { version = "0.13.3", features=["ecdh"], default-features = false }
-sha2 = { version = "0.10.9", default-features = false }
+# EC cryptography
+p256 = { version = "0.13.2", features = ["ecdsa","ecdh"], default-features = false, optional = true }
+p521 = { version = "0.13.3", features = ["ecdh"], default-features = false, optional = true }
+ed25519-dalek = { version = "2.2.0", default-features = false, optional = true }
+
+# HSS/LMS
+hbs-lms = { version = "0.1.1", default-features = false, optional = true }
+
+# Digests / HKDF
+sha2 = { version = "0.10.9", default-features = false, optional = true }
 sha3 = { version = "0.10.8", default-features = false }
-hmac = { version = "0.12.1", default-features = false }
-hbs-lms = { version = "0.1.1", default-features = false }
-ed25519-dalek = { version = "2.2.0", default-features = false }
-aes-kw = { version = "0.2.1", default-features = false }
 hkdf = { version = "0.12.4", default-features = false }

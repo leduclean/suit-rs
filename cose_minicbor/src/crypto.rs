@@ -18,8 +18,8 @@ use crate::{
     cose_keys::Curve,
     errors::{CoseError, ErrorImpl},
 };
-use p256::elliptic_curve::point::DecompressPoint;
 
+#[cfg(any(feature = "ecdh_p256", feature = "ecdh_p521"))]
 /// Performs an Elliptic Curve Diffie–Hellman Ephemeral-Static (ECDH-ES) key exchange.
 ///
 /// Computes a shared secret `Z` from the recipient’s static private key and the sender’s
@@ -42,7 +42,10 @@ pub(crate) fn perform_ecdh_es(
     pub_crv: Curve,
     z_out: &mut [u8],
 ) -> Result<(), CoseError> {
+    use p256::elliptic_curve::point::DecompressPoint;
+
     match pub_crv {
+        #[cfg(feature = "ecdh_p256")]
         Curve::P256 => {
             let ephemeral_pub_key = match pub_y {
                 BytesBool::Bool(y_is_odd) => p256::PublicKey::from_affine(
@@ -76,6 +79,7 @@ pub(crate) fn perform_ecdh_es(
             z_out[..raw.len()].copy_from_slice(raw);
             Ok(())
         }
+        #[cfg(feature = "ecdh_p521")]
         Curve::P521 => {
             let ephemeral_pub_key = match pub_y {
                 BytesBool::Bool(y_is_odd) => p521::PublicKey::from_affine(
