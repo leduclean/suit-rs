@@ -1,4 +1,5 @@
 #[macro_export]
+/// Generate a lazy wrapper struct for CBOR arrays.
 macro_rules! iter_wrapper {
     ($name:ident, $inner:ty) => {
         #[doc = concat!(
@@ -32,6 +33,7 @@ macro_rules! iter_wrapper {
 }
 
 #[macro_export]
+/// Generate a bstr wrapper struct for `.bstr` CBOR struct
 macro_rules! bstr_wrapper {
     ($name:ident, $inner:ty) => {
         #[doc = concat!(

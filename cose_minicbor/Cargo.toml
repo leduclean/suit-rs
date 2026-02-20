@@ -1,5 +1,6 @@
 [package]
 name = "cose_minicbor"
+repository = "https://github.com/leduclean/suit-rs" 
 version = "0.1.0"
 edition = "2024"
 

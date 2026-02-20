@@ -4,11 +4,17 @@ use minicbor::{
 
 use crate::errors::CborError;
 
-///  On decode, for `.bstr cbor` T, we store the bytes slice in BstrStruct **without** decoding inner T.
+/// A lazily decoded CBOR `.bstr` wrapper.
 ///
+/// `BstrStruct<T>` stores the raw CBOR-encoded bytes of an inner value `T`
+/// without decoding it immediately.
 ///
-/// Call `get()` to decode T later if needed.
-// We borrow a bstr below so we need #[b()] instead of #[n()] of each struct using BstrStruct
+/// This is useful for:
+/// - deferred validation
+/// - signature verification workflows
+/// - minimizing allocations in `no_std` environments
+///
+/// Call [`BstrStruct::get()`] to decode the inner value when needed.
 #[derive(Debug)]
 pub struct BstrStruct<'a, T: 'a> {
     bytes: &'a [u8],
@@ -92,5 +98,13 @@ mod tests {
         let lazy: BstrStruct<Test> = minicbor::decode(&LAZY_CBOR_COMMAND_SEQ).unwrap();
         let seq = lazy.get().unwrap();
         assert_eq!(seq, minicbor::decode(&COMMAND_SEQ).unwrap())
+    }
+
+    #[test]
+    fn test_invalid_data() {
+        let invalid_bytes = b"\xFF\xFF";
+        let bstr: BstrStruct<u8> = minicbor::decode(invalid_bytes).unwrap();
+        let result = bstr.get();
+        assert!(result.is_err());
     }
 }
