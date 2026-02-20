@@ -28,7 +28,7 @@
 //! - signature verification:
 //!   - [`p256`](https://crates.io/crates/p256) — P-256 / ECDSA support.
 //!   - [`ed25519-dalek`](https://crates.io/crates/ed25519-dalek) — Ed25519 signatures.
-//!   - [`hbs-lms`](https://crates.io/crates/hbs-lms) — LMS (Leighton-Micali Signatures.
+//!   - [`hss_lms`](https://crates.io/crates/hbs-lms) — LMS (Leighton-Micali Signatures.
 //! - MAC / digest:
 //!   - [`hmac`](https://crates.io/crates/hmac) — HMAC interface.
 //!   - [`sha2`](https://crates.io/crates/sha2) — SHA-2 family (SHA-256, SHA-384).
@@ -46,11 +46,32 @@
 
 #![no_std]
 
-pub mod cose;
-pub mod cose_keys;
-mod crypto;
-pub mod errors;
-mod keys;
+mod common;
 mod multitype;
-mod verify_mac;
-mod verify_sign;
+mod verif_keys;
+
+pub mod cose_keys;
+pub mod errors;
+
+#[cfg(feature = "hmac")]
+mod hmac;
+
+#[cfg(feature = "decrypt")]
+mod crypto;
+
+mod cose_recipient;
+
+#[cfg(any(feature = "es256", feature = "ed25519", feature = "hss_lms"))]
+mod sign;
+
+pub mod cose {
+    #[cfg(feature = "hmac")]
+    pub use crate::hmac::cose_struct::{CoseMac, CoseMac0};
+
+    #[cfg(any(feature = "es256", feature = "ed25519", feature = "hss_lms"))]
+    pub use crate::sign::cose_struct::{CoseSign, CoseSign1};
+
+    pub use crate::cose_recipient::CoseRecipient;
+}
+
+pub use errors::CoseError;

@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
 use crate::errors::CoseError;
 
 /// Trait for the common verification procedure for each  
 /// cryptographic algorithm implementened.
+#[allow(dead_code)]
 pub(crate) trait VerifySignature {
     fn cose_verify(&self, msg: &[u8], sig: &[u8]) -> Result<(), CoseError>;
 }

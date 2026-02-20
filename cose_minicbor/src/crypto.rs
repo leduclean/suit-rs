@@ -13,12 +13,13 @@
 //!
 //! These functions are intended for internal use inside the COSE implementation and
 //! assume all inputs (curve parameters, keys, and buffers) have already been validated.
-use crate::multitype::BytesBool;
-use crate::{
-    cose_keys::Curve,
-    errors::{CoseError, ErrorImpl},
-};
 
+#[cfg(feature = "ecdh_es")]
+use crate::cose_keys::Curve;
+#[cfg(any(feature = "ecdh_es", feature = "a128kw", feature = "a256kw"))]
+use crate::errors::{CoseError, ErrorImpl};
+#[cfg(feature = "ecdh_es")]
+use crate::multitype::BytesBool;
 #[cfg(any(feature = "ecdh_p256", feature = "ecdh_p521"))]
 /// Performs an Elliptic Curve Diffie–Hellman Ephemeral-Static (ECDH-ES) key exchange.
 ///
@@ -118,6 +119,7 @@ pub(crate) fn perform_ecdh_es(
     }
 }
 
+#[cfg(any(feature = "ecdh_es", feature = "a128kw", feature = "a256kw"))]
 /// Unwraps an AES-wrapped key using AES Key Wrap [RFC 3394](https://datatracker.ietf.org/doc/html/rfc3394).
 ///
 /// Decrypts a wrapped CEK (Content Encryption Key) using the provided KEK

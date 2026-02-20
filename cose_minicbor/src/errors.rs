@@ -9,6 +9,7 @@ pub struct CoseError {
     pub(crate) source: ErrorImpl,
 }
 
+#[allow(dead_code)]
 #[derive(Error, Debug, Default)]
 pub(crate) enum ErrorImpl {
     #[error(transparent)]
@@ -73,6 +74,9 @@ pub(crate) enum ErrorImpl {
 
     #[error("Vec overflow, capacity was {0}")]
     OutOfSpace(usize),
+
+    #[error("Feature not supported: {0}")]
+    UnsupportedFeature(&'static str),
 
     #[error("Default Error")]
     #[default]

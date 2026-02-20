@@ -1,6 +1,6 @@
 use crate::cose_keys::KeyMaterial;
 use crate::errors::{CoseError, ErrorImpl};
-use crate::keys::VerifySignature;
+use crate::verif_keys::VerifySignature;
 use hbs_lms::{
     Sha256_256,
     signature::{Signature, Verifier},

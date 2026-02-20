@@ -1,18 +1,22 @@
-use crate::cose::HeaderMap;
+use crate::common::HeaderMap;
 use crate::cose_keys::{CoseAlg, CoseKeySet, KeyMaterial, KeyOp, KeyType};
 use crate::errors::{CoseError, ErrorImpl};
-use crate::keys::VerifySignature;
 
 #[cfg(feature = "es256")]
-use crate::keys::p256::P256VerifyingKey;
+use crate::verif_keys::p256::P256VerifyingKey;
 
 #[cfg(feature = "ed25519")]
-use crate::keys::ed25519::Ed25519VerifyingKey;
+use crate::verif_keys::ed25519::Ed25519VerifyingKey;
 
 #[cfg(feature = "hss_lms")]
-use crate::keys::hss_lms::HssLmsVerifyingKey;
+use crate::verif_keys::hss_lms::HssLmsVerifyingKey;
 
-pub(crate) fn get_verified_key<'a, K>(
+#[cfg(any(feature = "es256", feature = "ed25519", feature = "hss_lms"))]
+use crate::verif_keys::VerifySignature;
+
+#[inline]
+#[allow(dead_code)]
+pub fn get_verified_key<'a, K>(
     key_set: &'a CoseKeySet,
     kty: KeyType,
     alg: CoseAlg,
@@ -28,6 +32,7 @@ where
 /// Decodes a [`CoseKeySet`] from `keys`, selects the matching public key, adapts it to the underlying crypto library,
 /// and calls the signature verification algorithm, passing in the key, bstr encoded ToBeSigned and the signature
 /// as described in [RFC9052 section 4.4](https://www.rfc-editor.org/rfc/rfc9052.html#section-4.4).
+#[allow(unused_variables)]
 pub(crate) fn verify_cose_sign(
     keys: &[u8],
     to_be_signed: &[u8],
@@ -42,21 +47,22 @@ pub(crate) fn verify_cose_sign(
             let vk: P256VerifyingKey =
                 get_verified_key(&key_set, KeyType::Ec2, CoseAlg::ES256, headers.kid)?;
             vk.cose_verify(to_be_signed, signature)?;
+            Ok(())
         }
         #[cfg(feature = "ed25519")]
         Some(CoseAlg::ED25519) => {
             let vk: Ed25519VerifyingKey =
                 get_verified_key(&key_set, KeyType::Okp, CoseAlg::ED25519, headers.kid)?;
             vk.cose_verify(to_be_signed, signature)?;
+            Ok(())
         }
         #[cfg(feature = "hss_lms")]
         Some(CoseAlg::HSSLMS) => {
             let vk: HssLmsVerifyingKey =
                 get_verified_key(&key_set, KeyType::HssLms, CoseAlg::HSSLMS, headers.kid)?;
             vk.cose_verify(to_be_signed, signature)?;
+            Ok(())
         }
-        _ => return Err(ErrorImpl::UnexpectedSignAlg.into()),
+        _ => Err(ErrorImpl::UnexpectedSignAlg.into()),
     }
-
-    Ok(())
 }

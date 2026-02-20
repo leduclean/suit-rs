@@ -1,6 +1,6 @@
 use crate::cose_keys::{Curve, KeyMaterial};
 use crate::errors::{CoseError, ErrorImpl};
-use crate::keys::VerifySignature;
+use crate::verif_keys::VerifySignature;
 use ed25519_dalek::Verifier;
 
 pub(crate) struct Ed25519VerifyingKey(ed25519_dalek::VerifyingKey);

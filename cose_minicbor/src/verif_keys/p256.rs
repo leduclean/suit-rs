@@ -1,7 +1,7 @@
 use crate::cose_keys::{Curve, KeyMaterial};
 use crate::errors::{CoseError, ErrorImpl};
-use crate::keys::VerifySignature;
 use crate::multitype::BytesBool;
+use crate::verif_keys::VerifySignature;
 use p256::ecdsa::signature::Verifier;
 use p256::elliptic_curve::point::DecompressPoint;
 

@@ -5,7 +5,7 @@ edition = "2024"
 repository = "https://github.com/leduclean/suit-rs"
 
 [features]
-default = ["sha256", "es256", "ed25519", "hss_lms", "hmac256", "a128kw", "a256kw"]
+default = ["hmac", "decrypt", "es256", "sha256"]
 
 # Authentification
 es256 = ["p256"]
@@ -13,7 +13,7 @@ ed25519 = ["ed25519-dalek"]
 hss_lms = ["hbs-lms"]
 
 # Symmetric
-hmac256 = ["hmac"]
+hmac256 = ["hmac", "decrypt"]
 a128kw = ["aes-kw"]
 a256kw = ["aes-kw"]
 
@@ -28,16 +28,26 @@ sha256 = ["sha2"]
 sha384 = ["sha2"]
 sha512 = ["sha2"]
 
-# MTI Profile sets
-suit-sha256-hmac-a128kw-a128ctr = ["sha256","hmac256","a128kw"]
-suit-sha256-esp256-ecdh-a128ctr = ["sha256","es256","a128kw","ecdh_es"]
-suit-sha256-ed25519-ecdh-a128ctr = ["sha256","ed25519","a128kw","ecdh_es"]
-suit-sha256-hsslms-a256kw-a256ctr = ["sha256","hss_lms","a256kw"]
+# MTI Verification Profile sets
+
+# HMAC 
+suit-sha256-hmac = ["sha256","hmac256"]
+suit-sha256-hmac-a128kw = ["sha256","hmac256","a128kw"]
+suit-sha256-hmac-a256kw = ["sha256","hmac256","a256kw"]
+suit-sha256-hmac-ecdh_es-a256kw = ["sha256", "hmac256", "ecdh_es", "a256kw"]
+
+# Sign
+suit-sha256-es256 = ["sha256","es256"]
+suit-sha256-ed25519 = ["sha256","ed25519"]
+suit-sha256-hsslms = ["sha256","hss_lms"]
+
+# Recipient 
+decrypt = []
 
 [dependencies]
 minicbor = { version = "2.1.1", default-features = false, features = ["derive"] }
 minicbor-adapters = { version = "0.0.8", default-features = false }
-suit_cbor = { version = "0.1.0", path = "../suit_cbor" }
+suit_cbor = { version = "0.1.0", default-features = false}
 cbor-macro = { version = "0.1.0", default-features = false }
 cboritem = { version = "0.1.3", default-features = false }
 cbor-diag = { version = "0.1.12", default-features = false }
