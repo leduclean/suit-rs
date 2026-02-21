@@ -1,5 +1,5 @@
 #![no_std]
-use cose_minicbor::keys::{CoseAlg, CoseKey, CoseKeySetBuilder, KeyType};
+use cose_minicbor::cose_keys::{CoseAlg, CoseKey, CoseKeySetBuilder, KeyType};
 use suit_validator::handler::*;
 use suit_validator::{SuitError, suit_decode, suit_manifest::*};
 struct DemoHandler;

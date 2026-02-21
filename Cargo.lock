@@ -184,7 +184,7 @@ dependencies = [
  "p521",
  "sha2",
  "sha3",
- "suit_cbor",
+ "suit_cbor 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
 ]
 
@@ -1064,6 +1064,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "suit_cbor"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2d82cde894ed4f8219e161ef0975d35d8bcbb4bcaaa2024d964509d90b2650f"
+dependencies = [
+ "cbor-macro",
+ "cboritem",
+ "minicbor",
+ "thiserror",
+]
+
+[[package]]
 name = "suit_validator"
 version = "0.1.0"
 dependencies = [
@@ -1081,7 +1093,7 @@ dependencies = [
  "sha2",
  "sha3",
  "subtle",
- "suit_cbor",
+ "suit_cbor 0.1.0",
  "thiserror",
 ]
 
