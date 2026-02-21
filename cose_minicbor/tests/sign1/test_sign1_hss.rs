@@ -1,5 +1,5 @@
 use cose_minicbor::cose::CoseSign1;
-use cose_minicbor::keys::{CoseAlg, CoseKey, CoseKeySetBuilder, KeyType};
+use cose_minicbor::cose_keys::{CoseAlg, CoseKey, CoseKeySetBuilder, KeyType};
 
 #[test]
 fn test_suit_verify_sign1_hss_lms_attached() {

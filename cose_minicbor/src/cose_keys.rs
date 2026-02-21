@@ -1,4 +1,4 @@
-pub use crate::cose::CoseAlg;
+pub use crate::common::CoseAlg;
 use crate::errors::{CoseError, ErrorImpl};
 use crate::multitype::{BytesBool, CrvOrK};
 use minicbor::{Decode, Encode};
@@ -268,11 +268,25 @@ pub enum Curve {
     Ed25519,
 }
 
+impl Curve {
+    /// Little helper to compare a curve with the expected.
+    ///
+    /// * `expected`: Expected curve.
+    /// * `actual`: Actual curve.
+    pub fn check_curve(self, expected: Curve) -> Result<(), CoseError> {
+        if expected != self {
+            return Err(ErrorImpl::UnexpectedCurve.into());
+        }
+        Ok(())
+    }
+}
+
 suit_cbor::iter_wrapper!(IterCoseKey, CoseKey<'a>);
 
 /// An iterable [`CoseKey`] set to decode CoseKeySet buffer bytes as described in Appendix C.7 of RFC9052.
 #[derive(Decode)]
 #[cbor(transparent)]
+#[allow(unused)]
 pub(crate) struct CoseKeySet<'a>(#[b(0)] IterCoseKey<'a>);
 
 impl<'a> CoseKeySet<'a> {
@@ -280,6 +294,7 @@ impl<'a> CoseKeySet<'a> {
     /// Filter layers are: kid -> kty -> alg -> key_op.
     /// The correspondance is strict (reject if not provided) for all field,
     /// expect key_ops, on which we allow key if not provided.
+    #[allow(unused)]
     pub(crate) fn match_and_get_key(
         &self,
         kty: KeyType,
@@ -376,6 +391,7 @@ pub struct OwnedCoseKeySet<const N: usize> {
 }
 
 /// Enum to return different type of keys when using [`CoseKeySet::match_and_get_key`].
+#[allow(dead_code)]
 pub(crate) enum KeyMaterial<'a> {
     Ec2 {
         x: &'a [u8],

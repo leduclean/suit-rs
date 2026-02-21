@@ -1,6 +1,6 @@
 use cbor_diag::parse_diag;
-use cose_minicbor::keys::{CoseAlg, Curve};
-use cose_minicbor::keys::{CoseKey, CoseKeySetBuilder, KeyType};
+use cose_minicbor::cose_keys::{CoseAlg, Curve};
+use cose_minicbor::cose_keys::{CoseKey, CoseKeySetBuilder, KeyType};
 use suit_validator::SuitError;
 use suit_validator::handler::*;
 use suit_validator::suit_manifest;

@@ -1,5 +1,5 @@
 use cose_minicbor::cose::CoseMac;
-use cose_minicbor::keys::{CoseAlg, CoseKey, CoseKeySetBuilder, KeyOp, KeyType};
+use cose_minicbor::cose_keys::{CoseAlg, CoseKey, CoseKeySetBuilder, KeyOp, KeyType};
 
 #[test]
 fn test_suit_verify_hmac_a256kw() {

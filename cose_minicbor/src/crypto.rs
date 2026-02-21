@@ -6,20 +6,21 @@
 //!
 //! ## Functions
 //!
-//! - [`perform_ecdh_es`] Computes a shared secret using ECDH-ES on P-256 or P-521 curves,
+//! - perform_ecdh_es Computes a shared secret using ECDH-ES on P-256 or P-521 curves,
 //!   supporting both compressed (`x` + `y_is_odd`) and uncompressed (`x`, `y`) public key formats.
-//! - [`unwrap_aes_kw`] Unwraps a CEK (Content Encryption Key) using AES Key Wrap
+//! - unwrap_aes_kw Unwraps a CEK (Content Encryption Key) using AES Key Wrap
 //!   with either 128-bit or 256-bit KEK lengths.
 //!
 //! These functions are intended for internal use inside the COSE implementation and
 //! assume all inputs (curve parameters, keys, and buffers) have already been validated.
-use crate::multitype::BytesBool;
-use crate::{
-    errors::{CoseError, ErrorImpl},
-    keys::Curve,
-};
-use p256::elliptic_curve::point::DecompressPoint;
 
+#[cfg(feature = "ecdh_es")]
+use crate::cose_keys::Curve;
+#[cfg(any(feature = "ecdh_es", feature = "a128kw", feature = "a256kw"))]
+use crate::errors::{CoseError, ErrorImpl};
+#[cfg(feature = "ecdh_es")]
+use crate::multitype::BytesBool;
+#[cfg(any(feature = "ecdh_p256", feature = "ecdh_p521"))]
 /// Performs an Elliptic Curve Diffie–Hellman Ephemeral-Static (ECDH-ES) key exchange.
 ///
 /// Computes a shared secret `Z` from the recipient’s static private key and the sender’s
@@ -42,7 +43,10 @@ pub(crate) fn perform_ecdh_es(
     pub_crv: Curve,
     z_out: &mut [u8],
 ) -> Result<(), CoseError> {
+    use p256::elliptic_curve::point::DecompressPoint;
+
     match pub_crv {
+        #[cfg(feature = "ecdh_p256")]
         Curve::P256 => {
             let ephemeral_pub_key = match pub_y {
                 BytesBool::Bool(y_is_odd) => p256::PublicKey::from_affine(
@@ -76,6 +80,7 @@ pub(crate) fn perform_ecdh_es(
             z_out[..raw.len()].copy_from_slice(raw);
             Ok(())
         }
+        #[cfg(feature = "ecdh_p521")]
         Curve::P521 => {
             let ephemeral_pub_key = match pub_y {
                 BytesBool::Bool(y_is_odd) => p521::PublicKey::from_affine(
@@ -114,6 +119,7 @@ pub(crate) fn perform_ecdh_es(
     }
 }
 
+#[cfg(any(feature = "ecdh_es", feature = "a128kw", feature = "a256kw"))]
 /// Unwraps an AES-wrapped key using AES Key Wrap [RFC 3394](https://datatracker.ietf.org/doc/html/rfc3394).
 ///
 /// Decrypts a wrapped CEK (Content Encryption Key) using the provided KEK

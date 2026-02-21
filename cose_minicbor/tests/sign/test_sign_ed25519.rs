@@ -1,5 +1,5 @@
 use cose_minicbor::cose::CoseSign;
-use cose_minicbor::keys::{CoseAlg, CoseKey, CoseKeySetBuilder, Curve, KeyType};
+use cose_minicbor::cose_keys::{CoseAlg, CoseKey, CoseKeySetBuilder, Curve, KeyType};
 
 #[test]
 fn test_suit_verify_sign_ed25519() {
