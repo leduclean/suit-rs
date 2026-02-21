@@ -2,7 +2,15 @@
 name = "cose_minicbor"
 version = "0.1.0"
 edition = "2024"
+authors = ["leduclean"]
+description = "no_std-friendly Rust crate for decoding and verifying COSE (CBOR Object Signing and Encryption) messages with optional cryptographic backends."
 repository = "https://github.com/leduclean/suit-rs"
+homepage = "https://github.com/leduclean/suit-rs"
+documentation = "https://docs.rs/cose_minicbor"
+license = "MIT"
+keywords = ["cbor", "cose", "no_std", "iot", "embedded"]
+categories = ["cryptography", "embedded", "serialization", "security"]
+readme = "README.md"
 
 [features]
 default = ["hmac", "decrypt", "es256", "sha256"]
