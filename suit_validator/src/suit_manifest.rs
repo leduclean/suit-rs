@@ -25,8 +25,7 @@
 //! - [SUIT Spec: Manifest (Section 8.4)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4)
 
 use crate::{SuitError, flat_seq::FlatSequence};
-use cose_minicbor::cose::{CoseMac, CoseMac0, CoseSign, CoseSign1};
-use minicbor::{Decode, Decoder, Encode, bytes::ByteSlice, decode};
+use minicbor::{Decode, Encode, bytes::ByteSlice, decode};
 use suit_cbor::{bstr_wrapper, errors::CborError, iter_wrapper};
 
 type Rfc4122Uuid = [u8; 16];
@@ -136,43 +135,12 @@ pub struct SuitPayload<'a> {
 #[cbor(array)]
 pub(crate) struct SuitAuthentication<'a> {
     #[cbor(b(0), with = "minicbor::bytes")] // we will treat it directly so Bstr is not needed
-    digest: &'a [u8],
+    pub(crate) digest: &'a [u8],
     #[cbor(b(1), with = "minicbor::bytes")] // we will treat it directly so Bstr is not needed
-    authentication_block: &'a [u8], // we only support one authentication block
+    pub(crate) authentication_block: &'a [u8], // we only support one authentication block
 }
 
 impl SuitAuthentication<'_> {
-    /// Verify the cose signature of the authentication block.
-    pub(crate) fn suit_verify_cose(&self, keys: &[u8]) -> Result<(), SuitError> {
-        let mut d = Decoder::new(self.authentication_block);
-        let tag = d.tag()?;
-        match tag.as_u64() {
-            17 => {
-                let mac0: CoseMac0 = d.decode()?;
-                mac0.suit_verify_mac0(Some(self.digest), keys)?;
-                Ok(())
-            }
-            18 => {
-                let sign1: CoseSign1 = d.decode()?;
-                sign1.suit_verify_cose_sign1(Some(self.digest), keys)?;
-                Ok(())
-            }
-            97 => {
-                let mac: CoseMac = d.decode()?;
-                mac.suit_verify_mac(Some(self.digest), keys)?;
-                Ok(())
-            }
-            98 => {
-                let sign: CoseSign = d.decode()?;
-                sign.suit_verify_cose_sign(Some(self.digest), keys)?;
-                Ok(())
-            }
-            _ => Err(minicbor::decode::Error::tag_mismatch(tag)
-                .with_message("SuitAuthenticationBlock: unexpected tag value")
-                .into()),
-        }
-    }
-
     /// Verify the digest of the [`SuitAuthentication`] block (computed) over bstr wrapped
     ///  [`SuitEnvelope::manifest`] bytes.
     pub(crate) fn suit_verify_digest(&self, manifest_bytes: &[u8]) -> Result<(), SuitError> {

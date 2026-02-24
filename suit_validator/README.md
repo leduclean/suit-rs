@@ -38,24 +38,45 @@ let mut handler = GenericStartHandler {
 suit_validator::suit_decode(&data, &mut handler, &keys_bytes)?;
 ```
 
+## Backend Cryptography
+
+By default, `suit_validator` uses the [`cose_minicbor`] crate as its cryptographic backend.  
+The default enabled features include:
+
+- `hmac` — HMAC-based signatures
+- `decrypt` — COSE decryption support
+- `es256` — ECDSA P-256 signatures (ES256)
+- `sha256` — SHA-256 digest computation
+
+You can create a `CoseCrypto` instance with:
+
+```rust
+use suit_validator::crypto::CoseCrypto;
+
+let keys_bytes = vec![0u8; 32]; // CBOR CoseKeySet for testing
+let crypto = CoseCrypto::new(&keys_bytes);
+
+```
+
 ## Manifest Structure
 
 ```
 SUIT_Envelope (Tag 107)
 ├── SUIT_Authentication
-│   ├── COSE_Sign1 (signature)
-│   └── SuitDigest (SHA-256)
+│ ├── COSE_Sign1 (signature)
+│ └── SuitDigest (SHA-256)
 ├── SUIT_Manifest (Tag 1070)
-│   ├── version
-│   ├── sequence-number
-│   ├── common
-│   │   └── shared-sequence
-│   ├── invoke
-│   ├── install
-│   ├── fetch
-│   ├── validate
-│   └── load
+│ ├── version
+│ ├── sequence-number
+│ ├── common
+│ │ └── shared-sequence
+│ ├── invoke
+│ ├── install
+│ ├── fetch
+│ ├── validate
+│ └── load
 └── severable-package-members
+
 ```
 
 ## Implementation

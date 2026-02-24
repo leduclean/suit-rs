@@ -48,6 +48,7 @@
 //! - [SUIT Manifest Specification - Command Sequences (Section 8.4.6)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.6)
 //! - [SUIT Manifest Specification - Digest Container (Section 10)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-10)
 
+use crate::crypto::SuitCrypto;
 use crate::errors::SuitError;
 use crate::flat_seq::*;
 use crate::handler::*;
@@ -316,7 +317,7 @@ impl<'a> SuitSharedSequence<'a> {
     ///
     /// ```no_run
     /// # use suit_validator::handler::*;
-    /// # use suit_validator::suit_manifest::SuitSharedSequence;
+    /// # use suit_validator::suit_manifest::{SuitSharedCommand, SuitCondition};
     /// struct MyHandler;
     /// impl SuitSharedSequenceHandler for MyHandler {
     ///     fn on_conditions<'a>(
@@ -324,7 +325,7 @@ impl<'a> SuitSharedSequence<'a> {
     ///         conditions: impl Iterator<Item = PairView<'a, SuitCondition>>,
     ///     ) -> Result<(), suit_validator::SuitError> {
     ///         for cond in conditions {
-    ///             println!("Condition code: {:?}", cond.key);
+    ///             println!("Condition code: {:?}", cond.op());
     ///         }
     ///         Ok(())
     ///     }
@@ -409,7 +410,8 @@ impl<'a> SuitCommandSequence<'a> {
     ///
     /// ```no_run
     /// # use suit_validator::handler::*;
-    /// # use suit_validator::suit_manifest::SuitCommandSequence;
+    /// # use suit_validator::suit_manifest::{SuitCommandSequence, SuitCondition, SuitDirective,
+    /// CommandCustomValue};
     /// struct ValidateHandler;
     /// impl SuitCommandHandler for ValidateHandler {
     ///     fn on_conditions<'a>(
@@ -524,6 +526,7 @@ impl<'a> SuitCommandSequence<'a> {
 /// ```no_run
 /// # use suit_validator::handler::SuitStartHandler;
 /// # use suit_validator::SuitError;
+/// # use suit_validator::crypto::CoseCrypto;
 /// struct MyHandler;
 /// impl SuitStartHandler for MyHandler {
 ///     fn on_envelope<'a>(&mut self, _envelope: suit_validator::suit_manifest::SuitEnvelope<'a>)
@@ -540,9 +543,10 @@ impl<'a> SuitCommandSequence<'a> {
 ///     }
 /// }
 /// let manifest_bytes = vec![/* CBOR data */];
-/// let keys = vec![/* key material */];
+/// let keys = vec![0u8; 32]; /* keys bytes */
+/// let mut crypto = CoseCrypto::new(&keys);
 /// let mut handler = MyHandler;
-/// suit_validator::suit_decode(&manifest_bytes, &mut handler, &keys)?;
+/// suit_validator::suit_decode(&manifest_bytes, &mut handler, &mut crypto)?;
 /// # Ok::<(), SuitError>(())
 /// ```
 ///
@@ -554,13 +558,14 @@ impl<'a> SuitCommandSequence<'a> {
 /// - [SUIT Spec: Manifest Setup (Section 6.1)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-6.1)
 /// - [SUIT Spec: Required Checks (Section 6.2)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-6.2)
 /// - [RFC 9124: SUIT Requirements](https://www.rfc-editor.org/rfc/rfc9124)
-pub(crate) fn decode_and_dispatch<H>(
+pub(crate) fn decode_and_dispatch<H, C>(
     buf: &[u8],
     handler: &mut H,
-    keys: &[u8],
+    crypto: &mut C,
 ) -> Result<(), SuitError>
 where
     H: SuitStartHandler,
+    C: SuitCrypto,
 {
     let mut d = Decoder::new(buf);
     let tag = d.tag()?;
@@ -575,7 +580,8 @@ where
             // The SUIT_DIGEST is computed over the bstr-wrapped SUIT_Manifest bytes
             authentication.suit_verify_digest(envelope.manifest.raw_bytes())?;
 
-            authentication.suit_verify_cose(keys)?;
+            // COSE verification
+            crypto.verify_cose(authentication.authentication_block, authentication.digest)?;
             handler.on_envelope(envelope)
         }
         1070 => {
