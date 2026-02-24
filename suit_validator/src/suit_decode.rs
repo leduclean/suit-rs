@@ -1,3 +1,53 @@
+//! CBOR Decoding for SUIT (Software Updates for Internet of Things) Manifests.
+//!
+//! This module provides functionality to decode SUIT manifest structures from CBOR-encoded
+//! binary data according to the [SUIT Manifest Specification](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest).
+//!
+//! # Overview
+//!
+//! SUIT manifests are CBOR-encoded metadata bundles describing firmware updates and trusted invocation
+//! processes. The manifest processor requires strict adherence to the specification for security.
+//!
+//! This module implements decoders for:
+//! - **Command Sequences**: Lists of conditions and directives that define update/invocation procedures
+//! - **Shared Sequences**: Common metadata and commands executed before other sequences
+//! - **SUIT Digests**: Cryptographic integrity checks for manifest elements
+//! - **Custom Commands**: Extensible application-specific commands
+//!
+//! # SUIT Manifest Processing Workflow
+//!
+//! According to Section 6 of the SUIT specification, the manifest processor follows these steps:
+//!
+//! 1. **Signature Verification**: Validate authentication (Section 8.3)
+//! 2. **Applicability Check**: Verify vendor/class identifiers match device (Section 8.4.9.1)
+//! 3. **Payload Fetch**: Obtain resources (Section 8.4.6)
+//! 4. **Installation**: Apply updates (Section 8.4.6)
+//! 5. **Validation**: Verify successful installation (Section 8.4.6)
+//!
+//! # Supported CBOR Types
+//!
+//! - **Bytes (bstr)**: For digest-over-CBOR and wrapped command sequences
+//! - **Arrays**: For command sequences and try-each lists
+//! - **Maps**: For command directives and parameters
+//! - **Integers**: For command codes and numeric parameters
+//! - **Strings**: For text metadata and URIs
+//! - **CBOR Tags**: Tag 107 (Envelope), Tag 112 (CBOR-PEN UUID)
+//!
+//! # Error Handling
+//!
+//! Decoding errors are reported as [`SuitError`] types, which may indicate:
+//! - CBOR type mismatches
+//! - Invalid command sequences
+//! - Malformed UUID formats
+//! - Unsupported command types
+//!
+//! See [`SuitError`] for detailed error variants.
+//!
+//! # References
+//!
+//! - [SUIT Manifest Specification - Command Sequences (Section 8.4.6)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.6)
+//! - [SUIT Manifest Specification - Digest Container (Section 10)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-10)
+
 use crate::errors::SuitError;
 use crate::flat_seq::*;
 use crate::handler::*;
@@ -103,7 +153,36 @@ impl<'a, Ctx> minicbor::Decode<'a, Ctx> for CommandCustomValue<'a> {
     }
 }
 
-/// Helper : accept RFC4122 UUID (bstr len 16) or cbor-pen tag (#6.112 (bstr))
+/// Decodes and validates a UUID or CBOR-PEN (Private Enterprise Number) identifier.
+///
+/// # Description
+///
+/// This helper function decodes vendor and class identifiers which may be encoded as either:
+/// - **RFC 4122 UUID**: A 16-byte binary string (Section 8.4.8.3 of SUIT spec)
+/// - **CBOR-PEN Tag**: CBOR Tag 112 wrapping a byte string (Section 8.4.8.1 of SUIT spec)
+///
+/// Both encodings must not exceed 16 bytes in length. The CBOR-PEN encoding allows for
+/// hierarchical Private Enterprise Number (PEN) based identifiers using the IANA PEN namespace.
+///
+/// # Parameters
+///
+/// * `d` - CBOR decoder at the current position
+/// * `_ctx` - Decoder context (unused)
+///
+/// # Returns
+///
+/// * `Ok(Some(&[u8]))` - Successfully decoded identifier bytes (max 16 bytes)
+/// * `Ok(None)` - Decoder was positioned at a null/nil value
+/// * `Err(DecodeError)` - If:
+///   - The UUID exceeds 16 bytes
+///   - The CBOR tag is not 112
+///   - The data type is neither bytes nor a tag
+///
+/// # References
+///
+/// - [SUIT Spec: Vendor Identifier (Section 8.4.8.3)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.8.3)
+/// - [SUIT Spec: CBOR PEN UUID (Section 8.4.8.1)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.8.1)
+/// - [RFC 4122: UUID Format](https://www.rfc-editor.org/rfc/rfc4122)
 pub(crate) fn decode_uuid_or_cborpen<'a, Ctx>(
     // TODO: refactor by using [cbor(tag=112)] in new VendorIdentifier type
     d: &mut Decoder<'a>,
@@ -154,9 +233,9 @@ impl<'a, C> Decode<'a, C> for Tag38LTag<'a> {
         }
     }
 }
-/// Helper to assert `[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*` tag format.
+/// Validates RFC 5646 language tag format used in SUIT text sections.
 /// (Regex not possible in no_std)
-fn is_valid_tag38ltag(s: &str) -> bool {
+pub(crate) fn is_valid_tag38ltag(s: &str) -> bool {
     let mut chars = s.chars().peekable();
     // First segment: only alphabetic, 1 to 8 chars
     let mut count = 0;
@@ -200,6 +279,68 @@ fn is_valid_tag38ltag(s: &str) -> bool {
 }
 
 impl<'a> SuitSharedSequence<'a> {
+    /// Decodes the shared sequence and dispatches components to a handler.
+    ///
+    /// # Description
+    ///
+    /// The shared sequence is a command sequence executed prior to each other command sequence
+    /// in the manifest. According to Section 8.4.5 of the SUIT specification, it contains:
+    ///
+    /// - **Conditions**: Tests for device compatibility (vendor ID, class ID, etc.)
+    /// - **Shared Commands**: Common operations like `set-component-index`, `override-parameters`,
+    ///   etc., which are reused across multiple sequences to reduce manifest size
+    ///
+    /// This method parses the flat sequence structure and invokes the handler's callbacks for
+    /// conditions and commands separately, allowing custom processing of each type.
+    ///
+    /// # Parameters
+    ///
+    /// * `self` - The decoded shared sequence
+    /// * `handler` - Implementation of [`SuitSharedSequenceHandler`] to process conditions and commands
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Successfully processed all conditions and commands
+    /// * `Err(SuitError)` - If:
+    ///   - The sequence exceeds `SUIT_MAX_FLAT_PAIR` (20) pairs
+    ///   - An unknown command or condition is encountered
+    ///   - The handler rejects processing
+    ///
+    /// # Handler Callbacks
+    ///
+    /// The handler is invoked with:
+    /// - `on_conditions()`: Iterator over [`SuitCondition`] items with their indices
+    /// - `on_commands()`: Iterator over [`SuitSharedCommand`] items with their indices
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use suit_validator::handler::*;
+    /// # use suit_validator::suit_manifest::SuitSharedSequence;
+    /// struct MyHandler;
+    /// impl SuitSharedSequenceHandler for MyHandler {
+    ///     fn on_conditions<'a>(
+    ///         &mut self,
+    ///         conditions: impl Iterator<Item = PairView<'a, SuitCondition>>,
+    ///     ) -> Result<(), suit_validator::SuitError> {
+    ///         for cond in conditions {
+    ///             println!("Condition code: {:?}", cond.key);
+    ///         }
+    ///         Ok(())
+    ///     }
+    ///     fn on_commands<'a>(
+    ///         &mut self,
+    ///         commands: impl Iterator<Item = PairView<'a, SuitSharedCommand<'a>>>,
+    ///     ) -> Result<(), suit_validator::SuitError> {
+    ///         Ok(())
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// # References
+    ///
+    /// - [SUIT Spec: suit-shared-sequence (Section 8.4.5)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.5)
+    /// - [SUIT Spec: Common Metadata (Section 5.3.2)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-5.3.2)
     pub fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitSharedSequenceHandler,
@@ -214,6 +355,93 @@ impl<'a> SuitSharedSequence<'a> {
 }
 
 impl<'a> SuitCommandSequence<'a> {
+    /// Decodes a command sequence and dispatches its components to a handler.
+    ///
+    /// # Description
+    ///
+    /// A command sequence is a list of conditions and directives that form a procedure.
+    /// The SUIT specification (Section 8.4.6) defines several command sequences with specific purposes:
+    ///
+    /// | Sequence | Purpose | Reference |
+    /// |----------|---------|-----------|
+    /// | suit-payload-fetch | Obtain resources | Section 8.4.6 |
+    /// | suit-install | Install/stage payloads | Section 8.4.6 |
+    /// | suit-validate | Verify installation success | Section 8.4.6 |
+    /// | suit-load | Prepare for execution | Section 8.4.6 |
+    /// | suit-invoke | Transfer execution control | Section 8.4.6 |
+    ///
+    /// This method parses the flat sequence structure and invokes handler callbacks for:
+    /// - **Conditions**: Prerequisite checks that must pass (Section 8.4.9)
+    /// - **Directives**: Actions to execute (Section 8.4.10)
+    /// - **Custom Commands**: Application-defined extensions (Section 8.4.11)
+    ///
+    /// # Parameters
+    ///
+    /// * `self` - The decoded command sequence
+    /// * `handler` - Implementation of [`SuitCommandHandler`] to process sequence components
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Successfully processed all components
+    /// * `Err(SuitError)` - If:
+    ///   - The sequence exceeds `SUIT_MAX_FLAT_PAIR` (20) pairs
+    ///   - An unknown condition, directive, or command is encountered
+    ///   - The handler rejects processing
+    ///
+    /// # Handler Callbacks
+    ///
+    /// The handler is invoked (in order) with:
+    /// - `on_conditions()`: Iterator over [`SuitCondition`] items with their reporting policies
+    /// - `on_directives()`: Iterator over [`SuitDirective`] items with their arguments
+    /// - `on_customs()`: Iterator over [`CommandCustomValue`] custom command arguments
+    ///
+    /// # Execution Order
+    ///
+    /// For each update procedure, command sequences are executed in the following order:
+    /// 1. Common command sequence (shared preparation)
+    /// 2. Payload Fetch (if specified)
+    /// 3. Install (if specified)
+    /// 4. Validate (always executed)
+    /// 5. Load (if invocation is needed)
+    /// 6. Invoke (if invocation is needed)
+    ///
+    /// # Code Example
+    ///
+    /// ```no_run
+    /// # use suit_validator::handler::*;
+    /// # use suit_validator::suit_manifest::SuitCommandSequence;
+    /// struct ValidateHandler;
+    /// impl SuitCommandHandler for ValidateHandler {
+    ///     fn on_conditions<'a>(
+    ///         &mut self,
+    ///         conds: impl Iterator<Item = PairView<'a, SuitCondition>>,
+    ///     ) -> Result<(), suit_validator::SuitError> {
+    ///         for cond in conds {
+    ///             println!("Condition: {:?}", cond.get()?);
+    ///         }
+    ///         Ok(())
+    ///     }
+    ///     fn on_directives<'a>(
+    ///         &mut self,
+    ///         dirs: impl Iterator<Item = PairView<'a, SuitDirective<'a>>>,
+    ///     ) -> Result<(), suit_validator::SuitError> {
+    ///         Ok(())
+    ///     }
+    ///     fn on_customs<'a>(
+    ///         &mut self,
+    ///         _custom: impl Iterator<Item = PairView<'a, CommandCustomValue<'a>>>,
+    ///     ) -> Result<(), suit_validator::SuitError> {
+    ///         Ok(())
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// # References
+    ///
+    /// - [SUIT Spec: Command Sequences (Section 8.4.6)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.6)
+    /// - [SUIT Spec: Conditions (Section 8.4.9)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.9)
+    /// - [SUIT Spec: Directives (Section 8.4.10)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.10)
+    /// - [SUIT Spec: Abstract Machine (Section 6.4)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-6.4)
     pub fn decode_and_dispatch<H>(&self, handler: &mut H) -> Result<(), SuitError>
     where
         H: SuitCommandHandler,
@@ -229,8 +457,103 @@ impl<'a> SuitCommandSequence<'a> {
     }
 }
 
-/// Starting entry point to decode a SUIT structure and dispatch the decoded items to the handler.
-/// It also perform a suit-authentification cryptographic computation if the manifest is authenticated
+/// Decodes a SUIT manifest or envelope and dispatches to the appropriate handler.
+///
+/// # Description
+///
+/// This is the main entry point for decoding SUIT structures. It handles both:
+///
+/// - **SUIT_Envelope** (Tag 107): Complete manifest with authentication wrapper and severable elements
+/// - **SUIT_Manifest** (Tag 1070): Bare manifest without authentication
+///
+/// The function implements Section 6 security requirements from the SUIT specification:
+/// 1. Verifies the signature of the manifest
+/// 2. Verifies the digest prior to cryptographic computation (prevents TOCTOU attacks)
+/// 3. Dispatches to handler for further processing
+///
+/// # Parameters
+///
+/// * `buf` - Raw CBOR-encoded bytes containing a SUIT structure
+/// * `handler` - Implementation of [`SuitStartHandler`] to process the decoded structure
+/// * `keys` - Buffer containing trusted keys for signature verification
+///
+/// # Returns
+///
+/// * `Ok(())` - Successfully decoded and verified the structure
+/// * `Err(SuitError)` - If:
+///   - The CBOR tag is neither 107 (Envelope) nor 1070 (Manifest)
+///   - Digest verification fails (corrupted or tampered manifest)
+///   - COSE signature verification fails (unauthenticated or invalid signature)
+///   - The handler rejects processing
+///
+/// # Tag Handling
+///
+/// | Tag | Type | Usage |
+/// |-----|------|-------|
+/// | 107 | SUIT_Envelope | Complete manifest with authentication and optional severable elements |
+/// | 1070 | SUIT_Manifest | Bare manifest without authentication; used for testing/dev only |
+///
+/// # Security Considerations
+///
+/// This function implements critical security checks as required by RFC 9124:
+///
+/// - **Signature Verification**: Validates COSE authentication using provided keys
+/// - **Digest Verification** (TOCTOU Protection): Verifies manifest digest before cryptographic operations
+/// - **Strict Ordering**: Digest check always precedes COSE verification
+///
+/// All these checks are **required** before processing any other part of the manifest.
+///
+/// # Parameters vs Envelope Elements
+///
+/// - `keys`: External key material for COSE signature verification
+/// - `wrapper.authentication`: COSE signature block within the envelope containing wrapped digest
+/// - `envelope.manifest`: The actual manifest subject to signature verification
+///
+/// # Authentication Block Structure (Section 8.3)
+///
+/// The authentication wrapper contains:
+/// ```text
+/// SUIT_Authentication = [
+///     bstr .cbor SUIT_Digest,           // Digest of manifest bytes
+///     * bstr .cbor SUIT_Authentication_Block  // COSE_Sign, COSE_Mac, etc.
+/// ]
+/// ```
+///
+/// # Example
+///
+/// ```no_run
+/// # use suit_validator::handler::SuitStartHandler;
+/// # use suit_validator::SuitError;
+/// struct MyHandler;
+/// impl SuitStartHandler for MyHandler {
+///     fn on_envelope<'a>(&mut self, _envelope: suit_validator::suit_manifest::SuitEnvelope<'a>)
+///         -> Result<(), SuitError>
+///     {
+///         println!("Received envelope");
+///         Ok(())
+///     }
+///     fn on_manifest<'a>(&mut self, _manifest: suit_validator::suit_manifest::SuitManifest<'a>)
+///         -> Result<(), SuitError>
+///     {
+///         println!("Received manifest");
+///         Ok(())
+///     }
+/// }
+/// let manifest_bytes = vec![/* CBOR data */];
+/// let keys = vec![/* key material */];
+/// let mut handler = MyHandler;
+/// suit_validator::suit_decode(&manifest_bytes, &mut handler, &keys)?;
+/// # Ok::<(), SuitError>(())
+/// ```
+///
+/// # References
+///
+/// - [SUIT Spec: Envelope (Section 8.2)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.2)
+/// - [SUIT Spec: Authentication (Section 8.3)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.3)
+/// - [SUIT Spec: Digest Verification (Section 8.3, TOCTOU)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.3)
+/// - [SUIT Spec: Manifest Setup (Section 6.1)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-6.1)
+/// - [SUIT Spec: Required Checks (Section 6.2)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-6.2)
+/// - [RFC 9124: SUIT Requirements](https://www.rfc-editor.org/rfc/rfc9124)
 pub(crate) fn decode_and_dispatch<H>(
     buf: &[u8],
     handler: &mut H,
