@@ -263,6 +263,7 @@ pub(crate) fn iter_custom<'b>(
     pairs.iter().filter(|p| p.op < 0).map(PairView::new)
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
