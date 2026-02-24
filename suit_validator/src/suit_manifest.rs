@@ -1,3 +1,29 @@
+//! SUIT Manifest Data Structures
+//!
+//! This module defines the CBOR structures for SUIT manifests according to
+//! [Section 8 of the SUIT Specification](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8).
+//!
+//! # Core Structures
+//!
+//! - [`SuitEnvelope`]: Top-level container with authentication and optional payloads
+//! - [`SuitManifest`]: The manifest itself containing metadata and command sequences
+//! - [`SuitCommon`]: Shared metadata and commands reused across sequences
+//! - [`SuitCommandSequence`]: Lists of conditions and directives
+//! - [`SuitSharedSequence`]:  Command sequence executed before each command sequence.
+//! - [`SuitDigest`]: Cryptographic integrity checks
+//!
+//! # Encoded Forms
+//!
+//! Most complex structures are wrapped in `bstr` (byte string) for:
+//! - Clarity of parsing boundaries
+//! - Efficient integrity checking
+//! - Support for severable elements
+//!
+//! # References
+//!
+//! - [SUIT Spec: Envelope (Section 8.2)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.2)
+//! - [SUIT Spec: Manifest (Section 8.4)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4)
+
 use crate::{SuitError, flat_seq::FlatSequence};
 use cose_minicbor::cose::{CoseMac, CoseMac0, CoseSign, CoseSign1};
 use minicbor::{Decode, Decoder, Encode, bytes::ByteSlice, decode};
@@ -39,19 +65,52 @@ iter_wrapper!(IterSuitTagAndTextLmap, (Tag38LTag<'a>, SuitTextLMap<'a>));
 #[cbor(transparent)]
 pub struct Debug<T>(pub T);
 
+/// SUIT Envelope - Top-level container with authentication and optional elements.
+///
+/// The envelope wraps the manifest with cryptographic authentication, optional severable
+/// elements, and integrated payloads. All elements are byte-string wrapped for clear
+/// parsing boundaries and integrity verification.
+///
+/// # Mandatory Fields
+///
+/// - `wrapper`: COSE authentication block containing digest and signature
+/// - `manifest`: The manifest itself with version, sequence, and command sequences
+///
+/// # Optional Elements
+///
+/// - `manifest_members`: Severable elements that can be removed from the envelope
+///   (fetch, install, text) while maintaining signature validity
+/// - `payload`: Integrated payloads bundled within the envelope
+///
+/// # References
+///
+/// - [SUIT Spec: Envelope (Section 8.2)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.2)
+/// - [SUIT Spec: Severable Elements (Section 8.6)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.6)
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
 pub struct SuitEnvelope<'a> {
+    /// Authentication wrapper with COSE signature and digest (always present)
     #[b(2)] // we borrow a bstr so we need #[b()] instead of #[n()]
     pub(crate) wrapper: BstrSuitAuthentication<'a>,
+    /// The manifest itself (always present, required to implement per Section 8.4)
     #[b(3)]
     pub manifest: BstrSuitManifest<'a>,
+    /// Optional severable elements (fetch, install, text) - can be removed from envelope
     #[n(4)]
     manifest_members: Option<IterableSuitSeverableManifestMember<'a>>,
+    /// Optional integrated payloads bundled within the envelope (Section 5.5)
     #[n(5)]
     pub payload: Option<IterableSuitPayload<'a>>,
 }
 
+/// Integrated payload within the envelope.
+///
+/// Payloads can be bundled directly in the manifest envelope for small datasets.
+/// URIs reference these payloads using fragment identifiers (e.g., "#name.bin").
+///
+/// # References
+///
+/// - [SUIT Spec: Integrated Payloads (Section 5.5)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-5.5)
 #[derive(Debug, Encode, Decode)]
 pub struct SuitPayload<'a> {
     #[n(0)]
@@ -60,7 +119,19 @@ pub struct SuitPayload<'a> {
     pub value: &'a [u8],
 }
 
-/// ? should it stay private or we should support independent SuitAuthentication process by user ?
+/// Authentication wrapper - COSE signature and manifest digest.
+///
+/// This structure contains:
+/// 1. A digest of the manifest bytes (for TOCTOU protection)
+/// 2. One or more COSE authentication blocks (COSE_Sign, COSE_Mac, etc.)
+///
+/// Per Section 8.3, the digest **MUST** be verified before cryptographic computation
+/// to prevent Time-of-Check to Time-of-Use (TOCTOU) attacks.
+///
+/// # References
+///
+/// - [SUIT Spec: Authentication (Section 8.3)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.3)
+/// - [RFC 9124: Security Considerations (Section 4.3.30)](https://www.rfc-editor.org/rfc/rfc9124#section-4.3.30)
 #[derive(Debug, Encode, Decode)]
 #[cbor(array)]
 pub(crate) struct SuitAuthentication<'a> {
@@ -110,6 +181,25 @@ impl SuitAuthentication<'_> {
     }
 }
 
+/// Cryptographic digest for integrity verification.
+///
+/// Supports multiple hash algorithms as defined in the COSE Algorithms registry.
+/// SHA-256 is mandatory to implement; others are optional.
+///
+/// # Supported Algorithms
+///
+/// | Algorithm | ID | Status |
+/// |-----------|----|----|
+/// | SHA-256 | -16 | Mandatory |
+/// | SHA-384 | -43 | Optional |
+/// | SHA-512 | -44 | Optional |
+/// | SHAKE128 | -18 | Not Supported |
+/// | SHAKE256 | -45 | Not Supported |
+///
+/// # References
+///
+/// - [SUIT Spec: Digest Container (Section 10)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-10)
+/// - [COSE Algorithms (RFC 9054)](https://www.rfc-editor.org/rfc/rfc9054#section-8)
 #[derive(Debug, Encode, Decode)]
 #[cbor(array)]
 pub struct SuitDigest<'a> {
@@ -204,6 +294,36 @@ impl SuitDigest<'_> {
     }
 }
 
+/// SUIT Manifest - Primary metadata for firmware updates or trusted invocation.
+///
+/// Contains version, sequence number, and the command sequences that define
+/// the update or invocation process. All manifest elements are scoped to specific
+/// components identified in the common section.
+///
+/// # Mandatory Fields
+///
+/// - `version`: Must be 1 (Section 8.4.1)
+/// - `sequence_number`: Monotonically increasing anti-rollback counter (Section 8.4.2)
+/// - `common`: Shared components and commands for all sequences (Section 8.4.5)
+///
+/// # Command Sequences
+///
+/// The manifest defines up to 5 optional command sequences:
+///
+/// | Sequence | Purpose | Update | Invocation |
+/// |----------|---------|--------|-----------|
+/// | validate | Verify installation | ✓ | ✓ |
+/// | load | Prepare for execution | | ✓ |
+/// | invoke | Transfer control | | ✓ |
+/// | payload_fetch | Obtain resources | ✓ | |
+/// | install | Apply installation | ✓ | |
+///
+/// See Section 8.4.6 of the SUIT specification for sequence execution order.
+///
+/// # References
+///
+/// - [SUIT Spec: Manifest Structure (Section 8.4)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4)
+/// - [SUIT Spec: Update Procedure (Section 6.1)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-6.1)
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
 pub struct SuitManifest<'a> {
@@ -265,6 +385,20 @@ pub struct SuitIntegratedPayload<'a> {
     pub value: &'a str,
 }
 
+/// Severable element encoding - either a digest or wrapped CBOR object.
+///
+/// Allows command sequences and text sections to be severable from the manifest.
+/// A digest is included in the manifest; the actual content is in the envelope.
+/// This reduces manifest size while maintaining integrity.
+///
+/// # Variants
+///
+/// - `Digest`: SUIT_Digest referencing content in the envelope
+/// - `Cbor`: Inline content when not severable
+///
+/// # References
+///
+/// - [SUIT Spec: Severable Elements (Section 8.6)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.6)
 #[derive(Debug, Encode)]
 pub enum DigestOrCbor<'a, T: 'a> {
     #[n(1)]
@@ -273,6 +407,25 @@ pub enum DigestOrCbor<'a, T: 'a> {
     Cbor(#[n(0)] T),
 }
 
+/// Common metadata shared across all command sequences in a manifest.
+///
+/// Contains the list of components targeted by this manifest and the shared command
+/// sequence that executes prior to each other sequence. This reduces manifest size
+/// by allowing reusable parameters and commands.
+///
+/// # Execution Order
+///
+/// For each command sequence (fetch, install, validate, load, invoke):
+/// 1. Common sequence executes first (if present)
+/// 2. Then the specific sequence executes
+///
+/// Per Section 8.4.5, the common sequence **MUST NOT** have side effects beyond
+/// setting parameter values.
+///
+/// # References
+///
+/// - [SUIT Spec: Common (Section 8.4.5)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.5)
+/// - [SUIT Spec: Metadata Overview (Section 5.3.2)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-5.3.2)
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
 pub struct SuitCommon<'a> {
@@ -294,6 +447,14 @@ impl<'a> SuitComponents<'a> {
     }
 }
 
+/// Component identifier - hierarchical array of byte strings.
+///
+/// Can represent simple IDs like `[h'00']` or filesystem paths like `['usr','bin','env']`.
+/// Allows construction of hierarchical component structures for complex devices.
+///
+/// # References
+///
+/// - [SUIT Spec: Component Identifier (Section 8.4.5.1)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.5.1)
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitComponentIdentifier<'a>(#[cbor(borrow)] IterableByteSlice<'a>);
@@ -304,10 +465,23 @@ impl<'a> SuitComponentIdentifier<'a> {
     }
 }
 
+/// Shared command sequence executed before each command sequence.
+///
+/// Contains conditions and commands common to multiple sequences. Per Section 8.4.5,
+/// this sequence **MUST NOT** have side effects beyond setting parameters.
+/// Custom commands are forbidden in shared sequences for security.
+///
+/// # References
+///
+/// - [SUIT Spec: suit-shared-sequence (Section 8.4.5)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.5)
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitSharedSequence<'a>(#[b(0)] pub(crate) FlatSequence<'a>); // + = at least 1
 
+/// Commands valid in the shared sequence.
+///
+/// Restricted set compared to general directives - no fetch/copy/invoke allowed.
+/// Custom commands are explicitly forbidden for security.
 #[derive(Debug, Encode, Decode)]
 pub enum SuitSharedCommand<'a> {
     #[n(12)]
@@ -324,6 +498,16 @@ pub enum SuitSharedCommand<'a> {
     OverrideParameters(#[n(0)] SuitParameters<'a>), // TODO should 1 +
 }
 
+/// Component index selector for set-component-index directive.
+///
+/// Allows flexible component targeting:
+/// - **Single**: Index a specific component
+/// - **True**: Apply to all components
+/// - **Multiple**: Array of component indices
+///
+/// # References
+///
+/// - [SUIT Spec: set-component-index (Section 8.4.10.1)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.10.1)
 #[derive(Debug, Encode)]
 pub enum IndexArg<'a> {
     #[n(0)]
@@ -341,10 +525,28 @@ pub struct SuitDirectiveTryEachArgumentShared<'a> {
     pub sequences: Option<IterBstrSuitSharedSequence<'a>>, // 2* bstr.cbor SUIT_Shared_Sequence
 }
 
+/// Command sequence - ordered lists of conditions and directives.
+///
+/// Defines update or invocation procedures executed by the manifest processor.
+/// Sequences include payload-fetch, install, validate, load, and invoke.
+/// See Section 6.4 for the abstract machine semantics.
+///
+/// # References
+///
+/// - [SUIT Spec: Command Sequences (Section 8.4.6)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.6)
+/// - [SUIT Spec: Abstract Machine (Section 6.4)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-6.4)
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitCommandSequence<'a>(#[b(0)] pub(crate) FlatSequence<'a>);
 
+/// Custom command value for application-defined commands.
+///
+/// Supports extensibility via custom command codes (ID < -256).
+/// Values can be bytes, text, integers, or explicit nil.
+///
+/// # References
+///
+/// - [SUIT Spec: Custom Commands (Section 8.4.11)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.11)
 #[derive(Debug, Encode)]
 pub enum CommandCustomValue<'a> {
     #[n(0)]
@@ -357,6 +559,14 @@ pub enum CommandCustomValue<'a> {
     Nil,
 }
 
+/// Reporting policy for command execution outcomes.
+///
+/// Bitfield indicating whether success/failure and system information should be
+/// reported for this command. Used for manifest processor reporting and attestation.
+///
+/// # References
+///
+/// - [SUIT Spec: Reporting Policy (Section 8.4.7)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.7)
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitRepPolicy(pub SuitReportingBits);
@@ -371,6 +581,24 @@ bitflags::bitflags! {
     }
 }
 
+/// Conditions that must pass for sequence execution to continue.
+///
+/// Test device properties and payload integrity. If any condition fails,
+/// the current command sequence terminates unless soft-failure is enabled.
+///
+/// # Variants
+///
+/// - `VendorIdentifier`: Device vendor matches manifest vendor (Section 8.4.9.1)
+/// - `ClassIdentifier`: Device class matches manifest class (Section 8.4.9.1)
+/// - `DeviceIdentifier`: Device ID matches manifest ID (Section 8.4.9.1, optional)
+/// - `ImageMatch`: Stored image matches expected digest (Section 8.4.9.2)
+/// - `ComponentSlot`: Component index matches expected slot (Section 8.4.9.4)
+/// - `CheckContent`: Content matches expected bytes (Section 8.4.9.3)
+/// - `Abort`: Unconditional failure (Section 8.4.9.5)
+///
+/// # References
+///
+/// - [SUIT Spec: Conditions (Section 8.4.9)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.9)
 #[derive(Debug, Encode, Decode)]
 pub enum SuitCondition {
     #[n(1)]
@@ -408,6 +636,26 @@ impl SuitCondition {
     }
 }
 
+/// Directives - actions with side effects executed by the manifest processor.
+///
+/// Unlike conditions, directives perform actual work like fetching, writing,
+/// and executing payloads. Failure of a directive terminates the sequence.
+///
+/// # Variants
+///
+/// - `Write`: Write immediate content to component (Section 8.4.10.6)
+/// - `SetComponentIndex`: Select current component (Section 8.4.10.1)
+/// - `RunSequence`: Execute a nested sequence (Section 8.4.10.8)
+/// - `TryEach`: Try alternatives until one succeeds (Section 8.4.10.2)
+/// - `OverrideParameters`: Replace parameter values (Section 8.4.10.3)
+/// - `Fetch`: Obtain image from URI (Section 8.4.10.4)
+/// - `Copy`: Copy from source to current component (Section 8.4.10.5)
+/// - `Swap`: Exchange source and destination (Section 8.4.10.9)
+/// - `Invoke`: Transfer execution to component (Section 8.4.10.7)
+///
+/// # References
+///
+/// - [SUIT Spec: Directives (Section 8.4.10)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.10)
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
 pub enum SuitDirective<'a> {
@@ -459,6 +707,14 @@ impl SuitDirective<'_> {
 #[cbor(transparent)]
 pub struct SuitDirectiveTryEachArgument<'a>(#[cbor(borrow)] pub IterBstrSuitCommandSequence<'a>);
 
+/// Command parameters - inputs consumed by conditions and directives.
+///
+/// Scoped per component. Parameters are reused across commands to reduce
+/// manifest size. See Section 8.4.8 for all defined parameters and their usage.
+///
+/// # References
+///
+/// - [SUIT Spec: Parameters (Section 8.4.8)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.8)
 #[derive(Debug, Encode, Decode)]
 #[cbor(map)]
 pub struct SuitParameters<'a> {
@@ -503,10 +759,28 @@ pub struct SuitParameters<'a> {
 //     Bytes(#[n(0)] &'a ByteSlice),
 // }
 
+/// RFC 5646 language tag.
+///
+/// Identifies language variants of text descriptions in manifest.
+/// Format: `[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*`
+///
+/// # References
+///
+/// - [SUIT Spec: suit-text (Section 8.4.4)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.4)
+/// - [RFC 5646: Language Tags](https://www.rfc-editor.org/rfc/rfc5646)
 #[derive(Debug, Encode, Hash, Eq, PartialEq)]
 #[cbor(transparent)]
 pub struct Tag38LTag<'a>(pub &'a str);
 
+/// Human-readable text descriptions for manifest and components.
+///
+/// Severable element containing manifest description, update instructions,
+/// and per-component information in multiple languages. Typically removed
+/// before delivery to constrained devices.
+///
+/// # References
+///
+/// - [SUIT Spec: suit-text (Section 8.4.4)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8.4.4)
 #[derive(Debug, Encode, Decode)]
 #[cbor(transparent)]
 pub struct SuitTextMap<'a> {
