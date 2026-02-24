@@ -285,13 +285,34 @@ impl SuitStartHandler for StartHandler {
 fn test_decode_example_1() {
     // Read CBOR test file
     let cbor_item = parse_diag(include_str!("example_1.edn")).unwrap();
-    // Initialize key set
-    let key_bytes = setup::get_keys();
     // Decode the SUIT manifest
     suit_validator::suit_decode(
         cbor_item.to_bytes().as_slice(),
         &mut StartHandler,
-        key_bytes.as_ref(),
+        &mut setup::MockCrypto,
     )
     .expect("Decoding failed");
+}
+
+#[cfg(feature = "default_crypto")]
+#[test]
+fn test_default_backend_1() -> Result<(), SuitError> {
+    use suit_validator::crypto::CoseCrypto;
+    use suit_validator::handler::GenericStartHandler;
+
+    // Manifest CBOR minimal et valide
+    let cbor_item = parse_diag(include_str!("example_1.edn")).unwrap();
+
+    // Keys COSE de test
+    let keys = setup::get_keys();
+    let mut crypto = CoseCrypto::new(keys.as_ref());
+
+    let mut handler = GenericStartHandler {
+        on_envelope: |_| (),
+        on_manifest: |_| (),
+    };
+
+    suit_validator::suit_decode(cbor_item.to_bytes().as_slice(), &mut handler, &mut crypto)?;
+
+    Ok(())
 }

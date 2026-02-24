@@ -218,7 +218,7 @@ pub fn build_manifest_bytes_with_change(change: ManifestChange) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::setup::get_keys;
+    use crate::setup::MockCrypto;
     use suit_validator::handler::GenericStartHandler;
 
     // 1. version != 1
@@ -229,7 +229,7 @@ mod tests {
             on_envelope: |_env| panic!("Should not reach handler for bad version"),
             on_manifest: |_manif| panic!("Should not happend since we are decoding an envelop"),
         };
-        assert!(suit_decode(&bytes, &mut handler, get_keys().as_ref()).is_err());
+        assert!(suit_decode(&bytes, &mut handler, &mut MockCrypto).is_err());
     }
 
     // 2. digest algorithm unsupported (auth digest alg -> shake128 = -18)
@@ -240,7 +240,7 @@ mod tests {
             on_envelope: |_env| panic!("Should not reach handler for unsupported digest alg"),
             on_manifest: |_manif| panic!("Should not happend since we are decoding an envelop"),
         };
-        assert!(suit_decode(&bytes, &mut handler, get_keys().as_ref()).is_err());
+        assert!(suit_decode(&bytes, &mut handler, &mut MockCrypto).is_err());
     }
 
     // 3. digest incorrect (different bytes)
@@ -251,7 +251,7 @@ mod tests {
             on_envelope: |_env| panic!("Should not reach handler for bad digest"),
             on_manifest: |_manif| panic!("Should not happend since we are decoding an envelop"),
         };
-        assert!(suit_decode(&bytes, &mut handler, get_keys().as_ref()).is_err());
+        assert!(suit_decode(&bytes, &mut handler, &mut MockCrypto).is_err());
     }
 
     // 4. signature invalid
@@ -262,7 +262,7 @@ mod tests {
             on_envelope: |_env| panic!("Should not reach handler for bad signature"),
             on_manifest: |_manif| panic!("Should not happend since we are decoding an envelop"),
         };
-        assert!(suit_decode(&bytes, &mut handler, get_keys().as_ref()).is_err());
+        assert!(suit_decode(&bytes, &mut handler, &mut MockCrypto).is_err());
     }
 
     // 5. empty shared-sequence (no commands/conditions)
@@ -274,7 +274,7 @@ mod tests {
             on_manifest: |_manif| panic!("Should not happend since we are decoding an envelop"),
         };
         // decode should fail because shared sequence must have at least one pair
-        assert!(suit_decode(&bytes, &mut handler, get_keys().as_ref()).is_err());
+        assert!(suit_decode(&bytes, &mut handler, &mut MockCrypto).is_err());
     }
 
     // 6. components empty -> invalid (components must have at least one)
@@ -285,7 +285,7 @@ mod tests {
             on_envelope: |_env| panic!("Should not reach handler for empty components"),
             on_manifest: |_manif| panic!("Should not happend since we are decoding an envelop"),
         };
-        assert!(suit_decode(&bytes, &mut handler, get_keys().as_ref()).is_err());
+        assert!(suit_decode(&bytes, &mut handler, &mut MockCrypto).is_err());
     }
 
     // 7. remove image-size while image-digest present -> spec requires image-size when image-digest present
@@ -296,7 +296,7 @@ mod tests {
             on_envelope: |_env| panic!("Should not reach handler for missing image size"),
             on_manifest: |_manif| panic!("Should not happend since we are decoding an envelop"),
         };
-        assert!(suit_decode(&bytes, &mut handler, get_keys().as_ref()).is_err());
+        assert!(suit_decode(&bytes, &mut handler, &mut MockCrypto).is_err());
     }
 
     // 8. vendor id too long ( > 16 bytes ) -> decoding of UUID should fail
@@ -309,7 +309,7 @@ mod tests {
             on_envelope: |_env| panic!("Should not reach handler for long vendor id"),
             on_manifest: |_manif| panic!("Should not happend since we are decoding an envelop"),
         };
-        assert!(suit_decode(&bytes, &mut handler, get_keys().as_ref()).is_err());
+        assert!(suit_decode(&bytes, &mut handler, &mut MockCrypto).is_err());
     }
 
     // 9. policy invalid (use 255)
@@ -323,7 +323,7 @@ mod tests {
             on_envelope: |_env| panic!("Should not reach handler for invalid policy"),
             on_manifest: |_manif| panic!("Should not happend since we are decoding an envelop"),
         };
-        assert!(suit_decode(&bytes, &mut handler, get_keys().as_ref()).is_err());
+        assert!(suit_decode(&bytes, &mut handler, &mut MockCrypto).is_err());
     }
 
     // 10. install without URI
@@ -334,7 +334,7 @@ mod tests {
             on_envelope: |_env| panic!("Should not reach handler for install without uri"),
             on_manifest: |_manif| panic!("Should not happend since we are decoding an envelop"),
         };
-        assert!(suit_decode(&bytes, &mut handler, get_keys().as_ref()).is_err());
+        assert!(suit_decode(&bytes, &mut handler, &mut MockCrypto).is_err());
     }
 
     // 11. combined case: bad digest + bad signature
@@ -348,6 +348,6 @@ mod tests {
             on_envelope: |_env| panic!("Should not reach handler for bad manifest"),
             on_manifest: |_manif| panic!("Should not happend since we are decoding an envelop"),
         };
-        assert!(suit_decode(&bytes, &mut handler, get_keys().as_ref()).is_err());
+        assert!(suit_decode(&bytes, &mut handler, &mut MockCrypto).is_err());
     }
 }

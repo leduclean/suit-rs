@@ -2,23 +2,34 @@
 name = "suit_validator"
 version = "0.1.0"
 edition = "2024"
+authors = ["leduclean"]
+description = "no_std-friendly Rust crate for decoding and verifying suit manifest messages with optional."
+repository = "https://github.com/leduclean/suit-rs"
+homepage = "https://github.com/leduclean/suit-rs"
+documentation = "https://docs.rs/suit_validator"
+license = "MIT"
+keywords = ["cbor", "cose", "no_std", "iot", "embedded"]
+categories = ["parser", "embedded", "serialization", "security"]
+readme = "README.md"
 
 [features]
 # pure no_alloc
-default = []
+default = ["default_crypto"]
+
 # required for host building
 std = []
 host = ["std"]
 # Not yet implemented
 alloc = ["minicbor/alloc", "minicbor/half"]
 defmt = ["dep:defmt"]
+default_crypto = ["cose_minicbor"]
 
 [dev-dependencies]
 rusty-hook = "^0.11.2"
 
 [dependencies]
-cose_minicbor = { version = "0.1.0", path = "../cose_minicbor"}
-suit_cbor = { version = "0.1.0", path = "../suit_cbor"}
+cose_minicbor = { version = "0.1.0", optional = true}
+suit_cbor = { version = "0.1.0"}
 
 bitflags = { version = "2.9.4", default-features = false, features = ["serde"] }
 

@@ -1,5 +1,7 @@
 #![no_std]
+#![cfg(feature = "default_crypto")]
 use cose_minicbor::cose_keys::{CoseAlg, CoseKey, CoseKeySetBuilder, KeyType};
+use suit_validator::crypto::CoseCrypto;
 use suit_validator::handler::*;
 use suit_validator::{SuitError, suit_decode, suit_manifest::*};
 struct DemoHandler;
@@ -86,7 +88,7 @@ h'00112233445566778899aabbccddeeff0123456789abcdeffedcba9876543210'
     key.y(b"y coordinate")?;
     key_set_builder.push_key(key)?;
     let key_set_bytes = key_set_builder.into_bytes()?;
-
-    suit_decode(&example1, &mut handler, &key_set_bytes)?;
+    let mut crypto_handler = CoseCrypto::new(&key_set_bytes);
+    suit_decode(&example1, &mut handler, &mut crypto_handler)?;
     Ok(())
 }

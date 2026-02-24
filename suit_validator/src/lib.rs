@@ -25,13 +25,14 @@
 //! - **Manifest Types**: SUIT data structures defined in [`suit_manifest`]
 //! - **Error Handling**: Comprehensive error types in [`SuitError`]
 //!
-//! ## Quick Start
+//! ## Quick Start (with default_crypto enabled)
 //!
 //! Process a SUIT manifest with [`GenericStartHandler`](handler::GenericStartHandler) using closures:
 //!
 //! ```ignore
 //! use suit_validator::handler::GenericStartHandler;
 //! use cose_minicbor::cose_keys::{CoseKey, CoseKeySetBuilder, KeyType, CoseAlg};
+//! use suit_validator::crypto::CoseCrypto;
 //!
 //! // Build trusted keys (CBOR-encoded COSE KeySet)
 //! let mut keys_builder: CoseKeySetBuilder<1> = CoseKeySetBuilder::try_new()?;
@@ -41,6 +42,7 @@
 //! key.y(y_bytes)?;
 //! keys_builder.push_key(key)?;
 //! let keys = keys_builder.into_bytes()?;
+//! let mut crypto = CoseCrypto::new(&keys);
 //!
 //! // Decode and process
 //! let data = vec![/* CBOR manifest */];
@@ -48,11 +50,32 @@
 //!     on_envelope: |env| println!("Sequence: {}", env.manifest.sequence_number),
 //!     on_manifest: |_| {},
 //! };
-//! suit_validator::suit_decode(&data, &mut handler, &keys)?;
+//! suit_validator::suit_decode(&data, &mut handler, &mut crypto)?;
 //! # Ok::<(), SuitError>(())
 //! ```
 //!
-//! For detailed cryptographic key setup, see the [README](../README.md).
+//! ## Backend Cryptography
+//!
+//! By default, this library uses the [`cose_minicbor`] crate as its cryptographic backend.
+//! The default enabled features include:
+//!
+//! - `"hmac"` — HMAC-based signatures
+//! - `"decrypt"` — COSE decryption support
+//! - `"es256"` — ECDSA P-256 signatures (ES256)
+//! - `"sha256"` — SHA-256 digest computation
+//!
+//! The backend is automatically used when creating a `CoseCrypto` instance:
+//!
+//! ```ignore
+//! use suit_validator::crypto::CoseCrypto;
+//!
+//! // `keys` is a CBOR-encoded array of COSE keys
+//! let mut crypto = CoseCrypto::new(&keys);
+//! ```
+//!
+//! If you need to override the default cryptography implementation, implement the [`crypto::SuitCrypto`] trait
+//! and pass your instance to [`suit_decode()`]. This allows using custom algorithms, hardware security modules (HSMs),
+//! or platform-specific crypto engines.
 //!
 //! ## Custom Handler Implementation
 //!
@@ -137,6 +160,7 @@ mod flat_seq;
 mod suit_decode;
 mod suit_encode;
 
+pub mod crypto;
 pub mod handler;
 pub mod suit_manifest;
 pub use errors::SuitError;
@@ -201,9 +225,10 @@ pub use errors::SuitError;
 /// - [SUIT Spec: Manifest Processor (Section 6)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-6)
 /// - [SUIT Spec: CBOR Encoding (Section 8)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest#section-8)
 /// - [RFC 9124: SUIT Requirements](https://www.rfc-editor.org/rfc/rfc9124)
-pub fn suit_decode<H>(data: &[u8], handler: &mut H, key_buf: &[u8]) -> Result<(), SuitError>
+pub fn suit_decode<H, C>(data: &[u8], handler: &mut H, crypto: &mut C) -> Result<(), SuitError>
 where
     H: handler::SuitStartHandler,
+    C: crypto::SuitCrypto,
 {
-    suit_decode::decode_and_dispatch(data, handler, key_buf)
+    suit_decode::decode_and_dispatch(data, handler, crypto)
 }

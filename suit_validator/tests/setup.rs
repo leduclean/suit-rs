@@ -1,6 +1,18 @@
-use cose_minicbor::cose_keys::{CoseAlg, Curve};
-use cose_minicbor::cose_keys::{CoseKey, CoseKeySetBuilder, KeyType};
+#[cfg(feature = "default_crypto")]
+use cose_minicbor::cose_keys::{CoseAlg, CoseKey, CoseKeySetBuilder, Curve, KeyType};
 
+use suit_validator::SuitError;
+use suit_validator::crypto::SuitCrypto;
+
+pub struct MockCrypto;
+
+impl SuitCrypto for MockCrypto {
+    fn verify_cose(&self, _auth_bytes: &[u8], _digest_bytes: &[u8]) -> Result<(), SuitError> {
+        Ok(())
+    }
+}
+
+#[cfg(feature = "default_crypto")]
 pub fn get_keys() -> impl AsRef<[u8]> {
     // Initialize key set
     let mut cose_key_builder: CoseKeySetBuilder<100> =
