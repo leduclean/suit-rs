@@ -167,6 +167,28 @@ checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 [[package]]
 name = "cose_minicbor"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b14ea4fa1acfe9e759ab5f50866e0dd44c3f9903e7e7feaabc7c3312853cb8a5"
+dependencies = [
+ "cbor-diag",
+ "cbor-macro",
+ "cboritem",
+ "heapless",
+ "hex-literal",
+ "hkdf",
+ "hmac",
+ "minicbor",
+ "minicbor-adapters",
+ "p256",
+ "sha2",
+ "sha3",
+ "suit_cbor 0.1.0",
+ "thiserror",
+]
+
+[[package]]
+name = "cose_minicbor"
+version = "0.1.1"
 dependencies = [
  "aes-kw",
  "cbor-diag",
@@ -184,29 +206,7 @@ dependencies = [
  "p521",
  "sha2",
  "sha3",
- "suit_cbor 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "thiserror",
-]
-
-[[package]]
-name = "cose_minicbor"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b14ea4fa1acfe9e759ab5f50866e0dd44c3f9903e7e7feaabc7c3312853cb8a5"
-dependencies = [
- "cbor-diag",
- "cbor-macro",
- "cboritem",
- "heapless",
- "hex-literal",
- "hkdf",
- "hmac",
- "minicbor",
- "minicbor-adapters",
- "p256",
- "sha2",
- "sha3",
- "suit_cbor 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "suit_cbor 0.1.0",
  "thiserror",
 ]
 
@@ -1078,6 +1078,8 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "suit_cbor"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2d82cde894ed4f8219e161ef0975d35d8bcbb4bcaaa2024d964509d90b2650f"
 dependencies = [
  "cbor-macro",
  "cboritem",
@@ -1087,9 +1089,7 @@ dependencies = [
 
 [[package]]
 name = "suit_cbor"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2d82cde894ed4f8219e161ef0975d35d8bcbb4bcaaa2024d964509d90b2650f"
+version = "0.1.1"
 dependencies = [
  "cbor-macro",
  "cboritem",
@@ -1105,7 +1105,7 @@ dependencies = [
  "cbor-diag",
  "cbor-macro",
  "cboritem",
- "cose_minicbor 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cose_minicbor 0.1.0",
  "defmt",
  "heapless",
  "hex-literal",
@@ -1115,7 +1115,7 @@ dependencies = [
  "sha2",
  "sha3",
  "subtle",
- "suit_cbor 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "suit_cbor 0.1.0",
  "thiserror",
 ]
 
