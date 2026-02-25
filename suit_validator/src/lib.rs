@@ -8,6 +8,8 @@
 //! A NO Std Rust implementation of the SUIT (Software Updates for Internet of Things) manifest
 //! format as defined in [draft-ietf-suit-manifest](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest).
 //!
+//! This implementation targets **draft-ietf-suit-manifest-34** of the SUIT manifest specification.
+//!
 //! ## Overview
 //!
 //! This library provides a safe, efficient CBOR decoder for SUIT manifests for IoT firmware

@@ -2,6 +2,8 @@
 
 A Rust implementation of the [SUIT (Software Updates for Internet of Things)](https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest) manifest parser with cryptographic signature verification.
 
+This implementation targets **draft-ietf-suit-manifest-34** of the SUIT manifest specification.
+
 ## Features
 
 - **`no_std` Compatible**: Designed for embedded systems and IoT devices
